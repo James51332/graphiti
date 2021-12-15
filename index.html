@@ -82,6 +82,20 @@
                     this.y = y;
                 }
             }
+
+            class Line {
+                constructor(pos1, pos2)
+                {
+                    this.pos1 = pos1;
+                    this.pos2 = pos2;
+                }
+
+                draw() {
+                    ctx.moveTo(this.pos1.x, this.pos1.y);
+                    ctx.lineTo(this.pos2.x, this.pos2.y);
+                    ctx.stroke();
+                }
+            }
             
             class Rectangle {
                 constructor(pos, size)
@@ -101,6 +115,7 @@
            
             // Entry
             rect(100, 100, 200, 100);
+            line(0, 0, 200, 100);
 
             // Drawing API
             function draw(item)
@@ -116,9 +131,10 @@
 
             function line(x1, y1, x2, y2)
             {
-                ctx.moveTo(x1, y1);
-                ctx.lineTo(x2, y2);
-                ctx.stroke();
+                var pos1 = new Vec2(x1, y1);
+                var pos2 = new Vec2(x2, y2);
+                var line = new Line(pos1, pos2);
+                draw(line);
             }
 
             function rect(x, y, w, h)
