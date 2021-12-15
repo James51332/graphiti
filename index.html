@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset='utf-8'>
+        <title>Graphiti</title>
+
+        <style>
+            html, body {
+                padding: 0;
+                margin: 0;
+            }
+
+            .sidebar {
+                position: absolute;
+
+                width: 25%;
+                height: 100%;
+                left: 0;
+
+                background-color: gray;
+            }
+
+            #grid {
+                position: absolute;
+                width: 75%;
+                height: 100%;
+                left:25%;
+            }
+
+            .equation {                
+                background-color: white;
+                font-size: 18pt;
+                
+                margin: none;
+                border: none;
+                outline: none;
+
+                --padding: 10px;
+                --margin: 10px;
+                padding: var(--padding);
+
+                width: calc(calc(100% - calc(var(--padding) * 2)) - calc(var(--margin) * 2));
+                margin: var(--margin) var(--margin) 0 var(--margin);
+            }
+
+            .add-equation {
+                background-color: white;
+                font-size: 18pt;
+                
+                margin: none;
+                border: none;
+                outline: none;
+
+                --padding: 10px;
+                --margin: 10px;
+                padding: var(--padding);
+
+                width: calc(calc(100% - calc(var(--padding) * 2)));
+                margin: var(--margin) var(--margin) 0 var(--margin);
+            }
+        </style>
+    </head>
+    <body>
+        
+        <div class="sidebar">
+            <button class="add-equation" onclick="addEquation()">Add</button>
+        </div>
+        
+        <canvas id="grid">Your browser does not support the HTML canvas tag.</canvas>
+
+        <script>
+            // Canvas and Draw List
+            var canvas = document.getElementById("grid");    
+            var ctx = canvas.getContext("2d");
+            var drawList = [];
+
+            // Primitives
+            class Vec2 {
+                constructor(x, y)
+                {
+                    this.x = x;
+                    this.y = y;
+                }
+            }
+            
+            class Rectangle {
+                constructor(pos, size)
+                {
+                    this.pos = pos;
+                    this.size = size;
+                }
+
+                draw() {
+                    ctx.fillRect(this.pos.x, this.pos.y, this.size.x, this.size.y);
+                }
+            }
+
+            // Resize Callback
+            window.onresize = sizeCanvas;
+            sizeCanvas();
+           
+            // Entry
+            rect(100, 100, 200, 100);
+
+            // Drawing API
+            function draw(item)
+            {
+                item.draw();
+                drawList.push(item);
+            }
+
+            function clear() {
+                ctx.clear();
+                drawList.clear();
+            }
+
+            function line(x1, y1, x2, y2)
+            {
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.stroke();
+            }
+
+            function rect(x, y, w, h)
+            {
+                var pos = new Vec2(x, y);
+                var size = new Vec2(w, h);
+                var rect = new Rectangle(pos, size);
+                draw(rect);
+            }
+
+            // Resize Callback
+            function sizeCanvas() {
+                ctx.canvas.width = window.innerWidth * 0.75;
+                ctx.canvas.height = window.innerHeight;
+
+                // Redraw All Elements
+                for (var i = 0; i < drawList.length; i++)
+                {
+                    drawList[i].draw();
+                }
+            }
+
+            // Create Expressions
+            function addEquation() {
+                var sidebar = document.getElementsByClassName("sidebar")[0];
+
+                var input = document.createElement("input");
+                input.type = "text";
+                input.placeholder="Write your equation!"
+                input.classList.add("equation");
+                sidebar.appendChild(input);
+            }
+        </script>
+    </body>
+</html>
