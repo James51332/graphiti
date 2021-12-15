@@ -114,8 +114,28 @@
             sizeCanvas();
            
             // Entry
-            rect(100, 100, 200, 100);
-            line(0, 0, 200, 100);
+            line(0, getHeight() / 2, getWidth(), getHeight() / 2); // TODO: Abstract Grid System into it's own drawable type
+            line(getWidth() / 2, 0, getWidth() / 2, getHeight());
+            
+            // Graphing API
+
+            // The challenge here will be to create a system for representing equations
+            // and parsing them from the user. My plan is to create a class representing an
+            // expression which has two terms and an operation. A term can be a constant, 
+            // a variable, or another expression. We can then fairly easily write a system 
+            // to recursively evaluate an expression. When we want to graph, we'll convert the
+            // user-defined equation into and implicit equation (y = x -> y - x = 0) and then use
+            // the marching squares algorithm to graph. This will be the barebones of the graphing
+            // engine.
+
+            // Utility API
+            function getWidth() {
+                return ctx.canvas.width;
+            }
+
+            function getHeight() {
+                return ctx.canvas.height;
+            }
 
             // Drawing API
             function draw(item)
