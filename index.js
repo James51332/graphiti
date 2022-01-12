@@ -4,6 +4,13 @@ var ctx = canvas.getContext("2d");
 var drawList = [];
 
 // ----- Primitives ----------
+const Token = {
+    Constant: 'Constant',
+    Variable: 'Variable',
+    Operator: 'Operator',
+    Punctuator: 'Punctuator'
+};
+
 class Vec2 {
     constructor(x, y)
     {
@@ -101,7 +108,9 @@ class Variable
     constructor(symbol)
     {
         this.symbol = symbol;
-        Registry.set(this.symbol, 0);
+        
+        if (!Registry.exists(symbol))
+            Registry.set(symbol, 0);
     }
 
     evaluate() {
@@ -131,7 +140,6 @@ class Expression {
     }
 }
 
-
 // ----- Entry ----------
 {
     // Resize Callback
@@ -140,13 +148,74 @@ class Expression {
 
     // Draw the grid
     grid();
+
+    //rect(100, 100, 200, 200);
+
+    Registry.set(Reserved.X, 10);
 }
 
 // ----- Parsing Test ----------
-/* {
-    var tokens = tokenize("123/433*2+1");
-    console.log(tokens);
-} */
+function oppositeSigns(x, y)
+{
+    return (x > 0) != (y > 0);
+}
+
+{
+    var expr = "y-x^2";
+    var toks = tokenize(expr);
+    console.log(toks);
+    var rpn = parseTokens(toks);
+    console.log(rpn);
+    var expr = parseExpr(rpn);
+    console.log(expr);
+
+    // let's try out our grid test
+    // we'll assume our expression is one side of an implicit equation
+    var tileSize = 5;
+    for (var i = 0; i < getWidth(); i += tileSize)
+    {
+        for (var j = getHeight(); j > 0; j -= tileSize)
+        {
+            // let's evaluate our function at the corners of our box.
+            // if the sign varies between points we'll need to draw a line.
+            // this will be parallelized in the future.            
+            var screenLeft = -10;
+            var screenRight = 10;
+            var screenTop = 10;
+            var screenBottom = -10;
+
+            var l = (i / getWidth()) * (screenRight - screenLeft) + screenLeft; // map from (0 to width) to (screenLeft to screenRight)
+            var r = l + tileSize;
+            var t = (j / getHeight()) * (screenTop - screenBottom) + screenBottom;
+            var b = t - tileSize;
+
+            // Point 1
+            Registry.set(Reserved.X, l);
+            Registry.set(Reserved.Y, t);
+            p1 = expr.evaluate();
+
+            // // Point 2
+            // Registry.set(Reserved.X, l);
+            // Registry.set(Reserved.Y, t);
+            // p1 = expr.evaluate();
+
+            // // Point 3
+            // Registry.set(Reserved.X, l);
+            // Registry.set(Reserved.Y, t);
+            // p1 = expr.evaluate();
+
+            // // Point 4
+            // Registry.set(Reserved.X, l);
+            // Registry.set(Reserved.Y, t);
+            // p1 = expr.evaluate();
+
+            // This is a simple method for now to graph our curve based on its closeness to 0.
+            // We'll adjust to marching squares in future revisions.
+            if (Math.abs(p1) < 0.1) 
+            rect(i, getHeight() - j, tileSize, tileSize);
+        }
+    }
+}
 
 // ----- Registry Test ----------
 /* {
@@ -185,7 +254,110 @@ class Expression {
 
 // I am writing this algorithm with a small bit of background knowledge on
 // compiler design. First we tokenize into our seperate tokens. Then, we write
-// a recursive algorithm that will convert the tokens into expressions.
+// a recursive descent algorithm that will convert the tokens into expressions.
+// Currently, I'm looking at the Shunting-yard algorithm as a good starting place.
+// This will also handle operator-precedence. We create two stacks of values and then
+// operators.
+
+// https://www.freecodecamp.org/news/parsing-math-expressions-with-javascript-7e8f5572276e/
+// https://web.archive.org/web/20200719202722/https://en.wikipedia.org/wiki/Shunting-yard_algorithm
+
+// Here's the algorithm
+// 1. Read a token. Let’s call it t
+// 2. If t is a Literal or Variable, push it to the output queue.
+// 3. If t is a Function, push it onto the stack.
+// 4. If t is a Function Argument Separator (a comma), pop operators off the stack onto the output queue until the token at the top of the stack is a Left Parenthesis.
+// 5. If t is an Operator:
+    // a. while there is an Operator token o at the top of the operator stack and either t is left-associative and has precedence is less than or equal to that of o, or t is right associative, and has precedence less than that of o, pop o off the operator stack, onto the output queue;
+    // b. at the end of iteration push t onto the operator stack.
+// 6. If the token is a Left Parenthesis, push it onto the stack.
+// 7. If the token is a Right Parenthesis, pop operators off the stack onto the output queue until the token at the top of the stack is a left parenthesis. Then pop the left parenthesis from the stack, but not onto the output queue.
+// 8. If the token at the top of the stack is a Function, pop it onto the output queue.
+// When there are no more tokens to read, pop any Operator tokens on the stack onto the output queue.
+// Exit.
+
+// This function uses the shunting-yard algorithm to convert the token list into postfix notation
+// which can more easily be converted into an abstract syntax tree, and therefore, an expression
+function precedence(op)
+{
+    switch (op)
+    {
+        case Operation.Exponent: { return 3; }
+        case Operation.Multiply: { return 2; }
+        case Operation.Divide: { return 2; }
+        case Operation.Add: { return 1;}
+        case Operation.Subtract: { return 1; }
+        default: return -1;
+    }
+}
+
+function parseTokens(tokens)
+{
+    var outputQueue = [];
+    var operatorStack = [];
+
+    // TODO: Parsing Validation
+    for (var i = 0; i < tokens.length; i++)
+    {
+        var token = tokens[i];
+
+        // Parse Numbers
+        if (token[0] == Token.Constant)
+            outputQueue.push(new Constant(token[1]));
+
+        // Parse Variables
+        if (token[0] == Token.Variable)
+            outputQueue.push(new Variable(token[1]));
+
+        // Handle Parenthesis
+        if (token[0] == Token.Punctuator)
+        {
+            if (token[1] == '(')
+                operatorStack.push('(');
+            
+            if (token[1] == ')')
+            {
+                while (true)
+                {
+                    var operator = operatorStack.pop();
+                    if (operator == '(' || operatorStack.length == 0) break;
+
+                    outputQueue.push(operator);
+                }
+            }
+        }
+
+        // Operator Stack
+        if (token[0] == Token.Operator)
+        {
+            var op = token[1];
+
+            while (operatorStack.length > 0)
+            {
+                var prevOp = operatorStack[operatorStack.length - 1];
+
+                if (precedence(prevOp) > precedence(op))
+                {
+                    operatorStack.pop();
+                    outputQueue.push(prevOp);
+                } else 
+                {
+                    break;
+                }
+            }
+
+            operatorStack.push(op);
+        }
+    }
+
+    // Pop remaining stack to output
+    while (operatorStack.length > 0)
+    {
+        outputQueue.push(operatorStack.pop());
+    }
+
+    return outputQueue;
+}
 
 function parseInput(id)
 {
@@ -193,7 +365,51 @@ function parseInput(id)
     
     var tokens = tokenize(expr);
     console.log(tokens);
+
+    var rpn = parseTokens(tokens);
+    console.log(rpn);
+
+    var expr = parseExpr(rpn);
+    console.log(expr.evaluate());
 }
+
+function isOpName(tok)
+{
+    return (tok == 'Add')
+        || (tok == 'Subtract')
+        || (tok == 'Multiply')
+        || (tok == 'Divide')
+        || (tok == 'Exponent');
+}
+
+// Accepts an RPN Array
+function parseExpr(expr)
+{
+    for (var i = 0; i < expr.length; i++)
+    {
+        var tok = expr[i];
+        if (!isOpName(tok)) 
+            continue;
+
+        if (expr.indexOf(tok) < 2)
+        {
+            console.error("Parsing Error!");
+            return;
+        }
+
+        var t1 = expr[i - 2];
+        var t2 = expr[i - 1];
+
+        var e = new Expression(t1, t2, tok);
+        expr.splice(i - 2, 3, e);
+        i=0;
+
+        if (expr.length == 1)
+            return e;
+    }
+}
+
+// ----- Tokenizing ----------
 
 function isNumeric(str) {
     if (typeof str != "string") return false; // we only process strings!  
@@ -238,7 +454,7 @@ function tokenize(expr) {
             }
             
             // once we've parsed the constant, push it and skip to next token.
-            tokens.push(value);
+            tokens.push([Token.Constant, value]);
             continue;
         }
 
@@ -255,18 +471,29 @@ function tokenize(expr) {
                 case '^': { op = Operation.Exponent; break; }
             }
             
-            tokens.push(op);
+            tokens.push([Token.Operator, op]);
             continue;
         }
 
         // X & Y
         if (char.toLowerCase() == 'x')
         {
-            tokens.push(Reserved.X);
+            tokens.push([Token.Variable, Reserved.X]);
             continue;
         } else if (char.toLowerCase() == 'y')
         {
-            tokens.push(Reserved.Y);
+            tokens.push([Token.Variable, Reserved.Y]);
+            continue;
+        }
+
+        // Parenthesis
+        if (char == '(')
+        {
+            tokens.push([Token.Punctuator, '(']);
+            continue;
+        } else if (char == ')')
+        {
+            tokens.push([Token.Punctuator, ')']);
             continue;
         }
 
