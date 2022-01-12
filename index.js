@@ -11,6 +11,14 @@ const Token = {
     Punctuator: 'Punctuator'
 };
 
+const Operation = {
+    Add: {Name: 'Add', Precedence: 1},
+    Subtract: {Name: 'Subtract', Precedence: 1},
+    Multiply: {Name: 'Multiply', Precedence: 2},
+    Divide: {Name: 'Divide', Precedence: 2},
+    Exponent: {Name: 'Exponent', Precedence: 3},
+};
+
 class Vec2 {
     constructor(x, y)
     {
@@ -60,14 +68,6 @@ class Grid {
         line(getWidth() / 2, 0, getWidth() / 2, getHeight(), this.list);
     }
 }
-
-const Operation = {
-    Add: 'Add',
-    Subtract: 'Subtract',
-    Multiply: 'Multiply',
-    Divide: 'Divide',
-    Exponent: 'Exponent',
-};
 
 class Constant {
     constructor(value)
@@ -146,24 +146,29 @@ class Expression {
     window.onresize = sizeCanvas;
     sizeCanvas();
 
-    // Draw the grid
     grid();
-
-    //rect(100, 100, 200, 200);
-
-    Registry.set(Reserved.X, 10);
+    graphSample("y-x^2");
 }
 
-// ----- Parsing Test ----------
-function oppositeSigns(x, y)
-{
-    return (x > 0) != (y > 0);
-}
+// ----- Graphing ----------
 
+// The challenge here will be to create a system for representing equations
+// and parsing them from the user. My plan is to create a class representing an
+// expression which has two terms and an operation. A term can be a constant, 
+// a variable, or another expression. We can then fairly easily write a system 
+// to recursively evaluate an expression. When we want to graph, we'll convert the
+// user-defined equation into and implicit equation (y = x -> y - x = 0) and then use
+// the marching squares algorithm to graph. This will be the barebones of the graphing
+// engine.
+
+// I've gone ahead and implemented a couple of these features. I haven't written the marching squares algorithm yet
+// instead choosing to iterate and check how close a single point on each "tile" is to 0. This has the problem of where
+// some parts of the curve don't fall into the tolerance.
+
+function graphSample(expr)
 {
-    var expr = "y-x^2";
     var toks = tokenize(expr);
-    console.log(toks);
+    //console.log(toks);
     var rpn = parseTokens(toks);
     console.log(rpn);
     var expr = parseExpr(rpn);
@@ -217,39 +222,6 @@ function oppositeSigns(x, y)
     }
 }
 
-// ----- Registry Test ----------
-/* {
-    var variable = 'x';
-    Registry.set(variable, 5);
-    console.log(Registry.get(variable));
-} */
-
-// ----- Expression Test ----------
-/* {
-    var constants = [];
-    for (var i = 0; i <= 10; i++)
-    {
-        constants.push(new Constant(i));
-    }
-
-    var mult = new Expression(constants[5], constants[2], Operation.Multiply);
-    console.log(mult.evaluate());
-    
-    var add = new Expression(constants[1], mult, Operation.Add);
-    console.log(add.evaluate());
-} */
-
-// ----- Graphing ----------
-
-// The challenge here will be to create a system for representing equations
-// and parsing them from the user. My plan is to create a class representing an
-// expression which has two terms and an operation. A term can be a constant, 
-// a variable, or another expression. We can then fairly easily write a system 
-// to recursively evaluate an expression. When we want to graph, we'll convert the
-// user-defined equation into and implicit equation (y = x -> y - x = 0) and then use
-// the marching squares algorithm to graph. This will be the barebones of the graphing
-// engine.
-
 // ----- Parsing ----------
 
 // I am writing this algorithm with a small bit of background knowledge on
@@ -278,18 +250,6 @@ function oppositeSigns(x, y)
 
 // This function uses the shunting-yard algorithm to convert the token list into postfix notation
 // which can more easily be converted into an abstract syntax tree, and therefore, an expression
-function precedence(op)
-{
-    switch (op)
-    {
-        case Operation.Exponent: { return 3; }
-        case Operation.Multiply: { return 2; }
-        case Operation.Divide: { return 2; }
-        case Operation.Add: { return 1;}
-        case Operation.Subtract: { return 1; }
-        default: return -1;
-    }
-}
 
 function parseTokens(tokens)
 {
@@ -336,7 +296,7 @@ function parseTokens(tokens)
             {
                 var prevOp = operatorStack[operatorStack.length - 1];
 
-                if (precedence(prevOp) > precedence(op))
+                if (prevOp.Precedence > op.Precedence)
                 {
                     operatorStack.pop();
                     outputQueue.push(prevOp);
@@ -361,16 +321,19 @@ function parseTokens(tokens)
 
 function parseInput(id)
 {
-    var expr = document.body.getElementsByClassName("equation")[id].value; // retrieve raw input
+    var raw = document.body.getElementsByClassName("equation")[id].value; // retrieve raw input
     
-    var tokens = tokenize(expr);
-    console.log(tokens);
+    var tokens = tokenize(raw);
+    //console.log(tokens);
 
     var rpn = parseTokens(tokens);
-    console.log(rpn);
+    //console.log(rpn);
 
     var expr = parseExpr(rpn);
-    console.log(expr.evaluate());
+    //console.log(expr.evaluate());
+
+    if (expr.evaluate()) // test to see if the expression evaluates.
+        graphSample(raw);
 }
 
 function isOpName(tok)
@@ -388,7 +351,7 @@ function parseExpr(expr)
     for (var i = 0; i < expr.length; i++)
     {
         var tok = expr[i];
-        if (!isOpName(tok)) 
+        if (!isOpName(tok.Name)) // TODO: This isn't the most comfortable way to write this code. Revisit later.
             continue;
 
         if (expr.indexOf(tok) < 2)
@@ -578,3 +541,25 @@ function addEquation() {
 
     sidebar.appendChild(input);
 }
+
+// ----- Registry Test ----------
+/* {
+    var variable = 'x';
+    Registry.set(variable, 5);
+    console.log(Registry.get(variable));
+} */
+
+// ----- Expression Test ----------
+/* {
+    var constants = [];
+    for (var i = 0; i <= 10; i++)
+    {
+        constants.push(new Constant(i));
+    }
+
+    var mult = new Expression(constants[5], constants[2], Operation.Multiply);
+    console.log(mult.evaluate());
+    
+    var add = new Expression(constants[1], mult, Operation.Add);
+    console.log(add.evaluate());
+} */
