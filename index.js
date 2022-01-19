@@ -37,6 +37,7 @@ class Line {
     draw() {
         ctx.moveTo(this.pos1.x, this.pos1.y);
         ctx.lineTo(this.pos2.x, this.pos2.y);
+        ctx.lineWidth = 2;
         ctx.stroke();
     }
 }
@@ -147,7 +148,7 @@ class Expression {
     sizeCanvas();
 
     grid();
-    graphSample("y-x^2");
+    graphRaw("y-x^2");
 }
 
 // ----- Graphing ----------
@@ -165,59 +166,125 @@ class Expression {
 // instead choosing to iterate and check how close a single point on each "tile" is to 0. This has the problem of where
 // some parts of the curve don't fall into the tolerance.
 
-function graphSample(expr)
+function oppositeSign(x, y) {
+    return (x >= 0 && y <= 0) || (x <= 0 && y >= 0);
+}
+
+class Voxel {
+    constructor(l, t, size, expr) {
+        this.l = l;
+        this.t = t;
+        this.size = size;
+        this.expr = expr;
+    }
+
+    evaluate() {
+        // Point 1
+        Registry.set(Reserved.X, this.l);
+        Registry.set(Reserved.Y, this.t);
+        p1 = expr.evaluate();
+        // Point 2
+        Registry.set(Reserved.X, this.l + this.size);
+        Registry.set(Reserved.Y, this.t);
+        p2 = expr.evaluate();
+        // Point 3
+        Registry.set(Reserved.X, this.l + this.size);
+        Registry.set(Reserved.Y, this.t + this.size);
+        p3 = expr.evaluate();
+        // Point 4
+        Registry.set(Reserved.X, this.l);
+        Registry.set(Reserved.Y, this.t + this.size);
+        p4 = expr.evaluate();
+    }
+}
+
+function map(val, lower, upper, newLower, newUpper)
+{
+    return ((val - lower) / (upper - lower)) * (newUpper - newLower) + newLower;
+}
+
+function graphRaw(expr)
 {
     var toks = tokenize(expr);
     //console.log(toks);
     var rpn = parseTokens(toks);
-    console.log(rpn);
+    //console.log(rpn);
     var expr = parseExpr(rpn);
     console.log(expr);
 
     // let's try out our grid test
     // we'll assume our expression is one side of an implicit equation
-    var tileSize = 5;
-    for (var i = 0; i < getWidth(); i += tileSize)
-    {
-        for (var j = getHeight(); j > 0; j -= tileSize)
-        {
-            // let's evaluate our function at the corners of our box.
-            // if the sign varies between points we'll need to draw a line.
-            // this will be parallelized in the future.            
-            var screenLeft = -10;
-            var screenRight = 10;
-            var screenTop = 10;
-            var screenBottom = -10;
+    var tileSize = 2;
+    var canvasWidth = getWidth();
+    var canvasHeight = getHeight();
 
-            var l = (i / getWidth()) * (screenRight - screenLeft) + screenLeft; // map from (0 to width) to (screenLeft to screenRight)
-            var r = l + tileSize;
-            var t = (j / getHeight()) * (screenTop - screenBottom) + screenBottom;
-            var b = t - tileSize;
+    // let's evaluate our function at the corners of our box.
+    // if the sign varies between points we'll need to draw a line.
+    // this could be parallelized in the future.
+    var screenLeft = -10;
+    var screenRight = 10;
+    var screenTop = 10;
+    var screenBottom = -10;
+    
+    // i and j represent screen space
+    for (var i = 0; i < canvasWidth; i += tileSize)
+    {
+        for (var j = 0; j < canvasHeight; j += tileSize)
+        {
+            // here we map to grid space
+            var l = map(i, 0, canvasWidth, screenLeft, screenRight);
+            var t = map(j, 0, canvasHeight, screenTop, screenBottom);
+            var r = map(i + tileSize, 0, canvasWidth, screenLeft, screenRight);
+            var b = map(j + tileSize, 0, canvasHeight, screenTop, screenBottom);
 
             // Point 1
             Registry.set(Reserved.X, l);
             Registry.set(Reserved.Y, t);
             p1 = expr.evaluate();
 
-            // // Point 2
-            // Registry.set(Reserved.X, l);
-            // Registry.set(Reserved.Y, t);
-            // p1 = expr.evaluate();
+            // Point 2
+            Registry.set(Reserved.X, r);
+            Registry.set(Reserved.Y, t);
+            p2 = expr.evaluate();
 
-            // // Point 3
-            // Registry.set(Reserved.X, l);
-            // Registry.set(Reserved.Y, t);
-            // p1 = expr.evaluate();
+            // Point 3
+            Registry.set(Reserved.X, r);
+            Registry.set(Reserved.Y, b);
+            p3 = expr.evaluate();
 
-            // // Point 4
-            // Registry.set(Reserved.X, l);
-            // Registry.set(Reserved.Y, t);
-            // p1 = expr.evaluate();
+            // Point 4
+            Registry.set(Reserved.X, l);
+            Registry.set(Reserved.Y, b);
+            p4 = expr.evaluate();
 
             // This is a simple method for now to graph our curve based on its closeness to 0.
             // We'll adjust to marching squares in future revisions.
-            if (Math.abs(p1) < 0.1) 
-            rect(i, getHeight() - j, tileSize, tileSize);
+
+            var points = [];
+            if (oppositeSign(p1, p2)) 
+            {
+                points.push(new Vec2(i + tileSize/2, j));
+            }
+            if (oppositeSign(p2, p3))
+            {
+                points.push(new Vec2(i + tileSize, j + tileSize/2));
+            }
+            if (oppositeSign(p3, p4))
+            {
+                points.push(new Vec2(i + tileSize/2, j + tileSize));
+            }
+            if (oppositeSign(p4, p1))
+            {
+                points.push(new Vec2(i, j + tileSize/2));
+            }
+
+            for (var k = 0; k + 1 < points.length; k += 2)
+            {
+                line(points[k].x, points[k].y, points[k + 1].x, points[k + 1].y);
+            }
+
+            // if (Math.abs(p1) < 1) 
+            // rect(i, getHeight() - j, tileSize, tileSize);
         }
     }
 }
@@ -332,8 +399,9 @@ function parseInput(id)
     var expr = parseExpr(rpn);
     //console.log(expr.evaluate());
 
-    if (expr.evaluate()) // test to see if the expression evaluates.
-        graphSample(raw);
+    try { if (expr.evaluate()) // test to see if the expression evaluates.
+        graphRaw(raw);
+    } catch {}
 }
 
 function isOpName(tok)
@@ -356,7 +424,7 @@ function parseExpr(expr)
 
         if (expr.indexOf(tok) < 2)
         {
-            console.error("Parsing Error!");
+            console.log("Parsing Error!");
             return;
         }
 
@@ -543,11 +611,95 @@ function addEquation() {
 }
 
 // ----- Registry Test ----------
-/* {
-    var variable = 'x';
-    Registry.set(variable, 5);
-    console.log(Registry.get(variable));
-} */
+{
+    // Marching Square Algorithm
+    // Cases obtained from https://en.wikipedia.org/wiki/Marching_squares
+    
+    const lookup = [
+        [ // cell 1 negative
+            [ // cell 2 negative
+                [ // cell 3 negative
+                    function() { // (0, 0, 0, 0)
+                        // do nothing
+                    },
+                    function() { // (0, 0, 0, 1)
+                        // triangle bottom left
+                    }
+                ],
+                [
+                    function() { // (0, 0, 1, 0)
+                        // triangle bottom right
+                    },
+                    function() { // (0, 0, 1, 1)
+                        // bottom half
+                    }
+                ]
+            ],
+            [ // cell 2 positive
+                [ // cell 3 negative
+                    function() { // (0, 1, 0, 0)
+                        // triangle top right
+                    },
+                    function() { // (0, 1, 0, 1)
+                        // ambiguous case (test center)
+                    }  
+                ],
+                [ // cell 3 positive
+                    function() { // (0, 1, 1, 0)
+                        // right half
+                    },
+                    function() { // (0, 1, 1, 1)
+                        // all but top left
+                    }
+                ]
+            ]
+        ],
+        [ // cell 1 positive
+            [ // cell 2 negative
+                [ // cell 3 negative
+                    function() { // (1, 0, 0, 0)
+                        // top left triangle
+                    },
+                    function() { // (1, 0, 0, 1)
+                        // left half
+                    }
+                ],
+                [ // cell 3 positive
+                    function() { // (1, 0, 1, 0)
+                        // ambiguous case (test center)
+                    },
+                    function() { // (1, 0, 1, 1)
+                        // all but top right
+                    }
+                ]
+            ],
+            [ // cell 2 positive
+                [ // cell 3 negative
+                    function() { // (1, 1, 0, 0)
+                        // top half
+                    },
+                    function() { // (1, 1, 0, 1)
+                        // all but bottom right
+                    } 
+                ],
+                [ // cell 3 positive
+                    function() { // (1, 1, 1, 0)
+                        // all but 
+                    },
+                    function() { // (1, 1, 1, 1)
+                        line(10, 10, 200, 200);
+                    }
+                ]
+            ]
+        ]
+    ];
+
+    lookup[1][1][1][1]();
+
+    // var variable = 'x';
+    // Registry.set(variable, 5);
+    // console.log(Registry.get(variable));
+}
 
 // ----- Expression Test ----------
 /* {
