@@ -152,93 +152,70 @@ class Expression {
 
 // ----- Graphing ----------
 
-function graph(expr)
+function graph(string)
 {
-    // Convert the string of characters into an array of tokens
-    var toks = tokenize(expr);
-    if (toks === -1) 
+    // Parse our string
+    var expr = parse(string);
+    if (expr === -1)
     {
-        console.log("Graphing failed because string couldn't be tokenized!");
-        return -1;
+        console.log("Graphing failed because string couldn't be parsed!");
+        return;
     }
 
-    // Split the tokens into to expressions to be parsed
-    var sides = splitTokens(toks);
-    if (sides === -1) 
-    {
-        console.log("Graphing failed because tokens couldn't be split!");
-        return -1;
-    }
-
-    var lhs = parseTokens(sides[0]);
-    var rhs = parseTokens(sides[1]);
-    if (lhs === -1 || rhs === -1)
-    {
-        console.log("Graphing failed because expression(s) couldn't be parsed!");
-        return -1;
-    }
-
-    lhs = parseExpr(lhs);
-    rhs = parseExpr(rhs);
-    if (lhs === -1 || rhs === -1)
-    {
-        console.log("Graphing failed because expression(s) couldn't be converted!");
-        return -1;
-    }
-
-    var expr = new Expression(lhs, rhs, Operation.Subtract);
-
-    // let's try out our grid test
+    // Constants
     var tileSize = 1;
     var canvasWidth = getWidth();
     var canvasHeight = getHeight();
 
-    // let's evaluate our function at the corners of our box.
-    // if the sign varies between points we'll need to draw a line.
-    // this could be parallelized in the future.
-    // https://medium.com/serverlessguru/executing-code-in-parallel-javascript-a93740190c86
+    // TODO: obtain these from the grid.
     var screenLeft = -10;
     var screenRight = 10;
     var screenTop = 10;
     var screenBottom = -10;
     
-    // TODO: We can drasticallly increase the efficiency of the algorithm here.
-    // First off, we are computing the same data repeatedly because data is recomputed
-    // for both sides of the tile. Secondly, mapping is a little bit inefficient. 
+    // TODO: mapping is a little bit inefficient. 
     // We should iterate through grid space instead, only mapping when we need to plot a point.
     // We can can cache values to be efficient with our grid too. Once we start to be able to move
     // the grid around with the mouse, this performance will be critical.
 
-    // i and j represent screen space
+    // TODO: parallelization?
+    // https://medium.com/serverlessguru/executing-code-in-parallel-javascript-a93740190c86
+    
+    // Iterate through the array and compute the value of our equation at every point.
+    var data = [];
+    for (var i = 0; i <= canvasWidth; i += tileSize)
+    {
+        var col = [];
+        data.push(col);
+
+        for (var j = 0; j <= canvasHeight; j += tileSize)
+        {
+            var x = map(i, 0, canvasWidth, screenLeft, screenRight);
+            var y = map(j, 0, canvasHeight, screenTop, screenBottom);
+            
+            Registry.set(Reserved.X, x);
+            Registry.set(Reserved.Y, y);
+            var value = expr.evaluate();
+            
+            data[i].push(value);
+        }
+    }
+
+    // Next using the marching squares algoritm on every "tile" in our array.
     for (var i = 0; i < canvasWidth; i += tileSize)
     {
+        // if there isn't another columns after this, our algorithm won't work
+        if (i >= data.length - 1) break;
+
         for (var j = 0; j < canvasHeight; j += tileSize)
         {
-            // here we map to grid space
-            var l = map(i, 0, canvasWidth, screenLeft, screenRight);
-            var t = map(j, 0, canvasHeight, screenTop, screenBottom);
-            var r = map(i + tileSize, 0, canvasWidth, screenLeft, screenRight);
-            var b = map(j + tileSize, 0, canvasHeight, screenTop, screenBottom);
+            // if there isn't another row after this, our algorithm won't work
+            if (j >= data[i].length - 1) break;
 
-            // Point 1
-            Registry.set(Reserved.X, l);
-            Registry.set(Reserved.Y, t);
-            p1 = expr.evaluate();
-
-            // Point 2
-            Registry.set(Reserved.X, r);
-            Registry.set(Reserved.Y, t);
-            p2 = expr.evaluate();
-
-            // Point 3
-            Registry.set(Reserved.X, r);
-            Registry.set(Reserved.Y, b);
-            p3 = expr.evaluate();
-
-            // Point 4
-            Registry.set(Reserved.X, l);
-            Registry.set(Reserved.Y, b);
-            p4 = expr.evaluate();
+            var p1 = data[i][j]; // top left
+            var p2 = data[i + 1][j]; // top right
+            var p3 = data[i + 1][j + 1]; // bottom right
+            var p4 = data[i][j + 1]; // bottom left
 
             // Marching Square Algorithm
             // Cases obtained from https://en.wikipedia.org/wiki/Marching_square
@@ -248,7 +225,7 @@ function graph(expr)
             var points = [];
             if (oppositeSign(p1, p2)) 
             {
-                points.push(new Vec2(i + tileSize/2, j));
+                points.push(new Vec2(i + tileSize/2, j)); // TODO: linear interpolation
             }
             if (oppositeSign(p2, p3))
             {
@@ -278,20 +255,50 @@ function graph(expr)
 // equation. This will allow us to maintain a larger codebase. Here are the steps:
 
 // 1) Tokenize (via tokenize)
-// 2) Split Equation into Expressions (via splitTokens)
-// 3) Parse Expressions into RPN (via parseTokens)
-// 4) Convert RPN into Expression AST (via parseExpr)
+// 2) Split equation into expressions (via splitTokens)
+// 3) Parse expressions into postfix (via parseTokens)
+// 4) Convert postfix into expression tree (via parseExpr)
 
-// These four steps can be combined into an overarching function named parse(texts) which will handle
-// all of these. Abstraction is crucial here because we need to maintain the code where there will be
-// quite a few steps to accomplish a simple parsing. 
+function parse(string) {
+    // Convert the string of characters into an array of tokens
+    var toks = tokenize(string);
+    if (toks === -1) 
+    {
+        console.log("Parsing failed because string couldn't be tokenized!");
+        return -1;
+    }
+
+    // Split the tokens into to expressions to be parsed
+    var sides = splitTokens(toks);
+    if (sides === -1) 
+    {
+        console.log("Parsing failed because tokens couldn't be split!");
+        return -1;
+    }
+
+    var lhs = parseTokens(sides[0]);
+    var rhs = parseTokens(sides[1]);
+    if (lhs === -1 || rhs === -1)
+    {
+        console.log("Parsing failed because expression(s) couldn't be parsed!");
+        return -1;
+    }
+
+    lhs = parseExpr(lhs);
+    rhs = parseExpr(rhs);
+    if (lhs === -1 || rhs === -1)
+    {
+        console.log("Parsing failed because expression(s) couldn't be converted!");
+        return -1;
+    }
+
+    return new Expression(lhs, rhs, Operation.Subtract);
+}
 
 // Another thing to note is that we have essentially **NO** safe error checking. We could switch
 // to an infix parser or create a state machine to determine what should be expected in the equation next.
 // https://stackoverflow.com/questions/29634992/shunting-yard-validate-expression
 // I don't think this is something that will be too hard but it's crucial to implementing a better system.
-
-// TODO: We also need to account for single variable expressions. Typing x should graph y = x
 
 // Older Comments
 
