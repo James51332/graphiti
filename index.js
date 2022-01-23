@@ -1,7 +1,7 @@
 // ----- Globals ----------
 var canvas = document.getElementById("grid");    
 var ctx = canvas.getContext("2d");
-var drawList = [];
+var drawList = []; // We should create a graph primitve that will store it's own draw list
 
 // ----- Primitives ----------
 const Token = {
@@ -148,7 +148,7 @@ class Expression {
     sizeCanvas();
 
     grid();
-    graphRaw("y-x^2");
+    //graphRaw("y-x^2");
 }
 
 // ----- Graphing ----------
@@ -206,26 +206,52 @@ function map(val, lower, upper, newLower, newUpper)
 function graphRaw(expr)
 {
     var toks = tokenize(expr);
-    //console.log(toks);
-    var rpn = parseTokens(toks);
-    //console.log(rpn);
-    var expr = parseExpr(rpn);
+    var sides = splitTokens(toks);
+    
+    //console.log(sides);
+
+    var lhs = parseTokens(sides[0]);
+    var rhs = parseTokens(sides[1]);
+    
+    console.log("1");
+
+    lhs = parseExpr(lhs);
+    console.log(lhs);
+
+    console.log("2");
+
+    rhs = parseExpr(rhs);
+
+    console.log("3");
+
+    var expr = new Expression(lhs, rhs, Operation.Subtract);
     console.log(expr);
+
+    // TODO: We can totally skip this process if the expression fails to evaluate.
 
     // let's try out our grid test
     // we'll assume our expression is one side of an implicit equation
-    var tileSize = 2;
+    var tileSize = 1;
     var canvasWidth = getWidth();
     var canvasHeight = getHeight();
 
     // let's evaluate our function at the corners of our box.
     // if the sign varies between points we'll need to draw a line.
     // this could be parallelized in the future.
+    // https://medium.com/serverlessguru/executing-code-in-parallel-javascript-a93740190c86
     var screenLeft = -10;
     var screenRight = 10;
     var screenTop = 10;
     var screenBottom = -10;
     
+    // 01 - 20 - 22
+    // For the next commit, we'll drasticallly increase the efficiency of the algorithm
+    // First off, we are computing the same data repeatedly because data is recomputed
+    // for both sides of the tile. Secondly, mapping is a little bit inefficient. 
+    // We should iterate through grid space instead, only mapping when we need to plot a point.
+    // We can can cache values to be efficient with our grid too. Once we start to be able to move
+    // the grid around with the mouse, this performance will be critical.
+
     // i and j represent screen space
     for (var i = 0; i < canvasWidth; i += tileSize)
     {
@@ -257,8 +283,10 @@ function graphRaw(expr)
             Registry.set(Reserved.Y, b);
             p4 = expr.evaluate();
 
-            // This is a simple method for now to graph our curve based on its closeness to 0.
-            // We'll adjust to marching squares in future revisions.
+            // Marching Square Algorithm
+            // Cases obtained from https://en.wikipedia.org/wiki/Marching_square
+            // Instead of using cases to draw the right curve, we are just draw lines from the points
+            // where the sign switchs on the implicit equation.
 
             var points = [];
             if (oppositeSign(p1, p2)) 
@@ -282,14 +310,33 @@ function graphRaw(expr)
             {
                 line(points[k].x, points[k].y, points[k + 1].x, points[k + 1].y);
             }
-
-            // if (Math.abs(p1) < 1) 
-            // rect(i, getHeight() - j, tileSize, tileSize);
         }
     }
 }
 
 // ----- Parsing ----------
+
+// 01 - 21 - 22
+// I want to take a minute to breakdown the pipeline for converting from a string a text to a parsed
+// equation. This will allow us to maintain a larger codebase. Here are the steps:
+
+// 1) Tokenize (via tokenize)
+// 2) Split Equation into Expressions (via splitTokens)
+// 3) Parse Expressions into RPN (via parseTokens)
+// 4) Convert RPN into Expression AST (via parseExpr)
+
+// These four steps can be combined into an overarching function named parse(texts) which will handle
+// all of these. Abstraction is crucial here because we need to maintain the code where there will be
+// quite a few steps to accomplish a simple parsing. 
+
+// Another thing to note is that we have essentially **NO** safe error checking. We could switch
+// to an infix parser or create a state machine to determine what should be expected in the equation next.
+// https://stackoverflow.com/questions/29634992/shunting-yard-validate-expression
+// I don't think this is something that will be too hard but it's crucial to implementing a better system.
+
+// TODO: We also need to account for single variable expressions. Typing x should graph y = x
+
+// Older Comments
 
 // I am writing this algorithm with a small bit of background knowledge on
 // compiler design. First we tokenize into our seperate tokens. Then, we write
@@ -316,7 +363,7 @@ function graphRaw(expr)
 // Exit.
 
 // This function uses the shunting-yard algorithm to convert the token list into postfix notation
-// which can more easily be converted into an abstract syntax tree, and therefore, an expression
+// which can more easily be converted into an abstract syntax tree, and therefore, an expression.
 
 function parseTokens(tokens)
 {
@@ -386,20 +433,42 @@ function parseTokens(tokens)
     return outputQueue;
 }
 
+// If we have an equation, we can just set
+function splitTokens(toks)
+{
+    for (var i = 0; i < toks.length; i++)
+    {
+        var token = toks[i];
+
+        if (token[0] == Token.Punctuator && token[1] == '=')
+        {
+            // Ensure there is only one equals in equation
+            for (var j = i + 1; j < toks.length; j++) 
+            {
+                var tok = toks[j];
+                if (tok[0] == Token.Punctuator && tok[1] == '=')
+                    console.error("Only one equals allowed in equation!");
+            }
+
+            // Split equation into two expressions
+            var lhs = toks.slice(0, i);
+            var rhs = toks.slice(i + 1, toks.length);
+            return [lhs, rhs];
+        }
+    
+    }
+
+    // If we haven't returned yet, then we are only parsing an expression. Allow this to be 
+    // equal to y. For instance, x^2 => x^2 = y
+    var rhs = [[Token.Variable, Reserved.Y]];
+    return [toks, rhs];
+}
+
 function parseInput(id)
 {
     var raw = document.body.getElementsByClassName("equation")[id].value; // retrieve raw input
-    
-    var tokens = tokenize(raw);
-    //console.log(tokens);
 
-    var rpn = parseTokens(tokens);
-    //console.log(rpn);
-
-    var expr = parseExpr(rpn);
-    //console.log(expr.evaluate());
-
-    try { if (expr.evaluate()) // test to see if the expression evaluates.
+    try { // test to see if the expression evaluates.
         graphRaw(raw);
     } catch {}
 }
@@ -416,6 +485,15 @@ function isOpName(tok)
 // Accepts an RPN Array
 function parseExpr(expr)
 {
+    // Edge case where there is only one variable
+    if (expr.length == 1)
+    {
+        if (isOpName(expr[0]))
+            console.error("Operator cannot be parsed as expression!");
+        else 
+            return expr[0];
+    }
+
     for (var i = 0; i < expr.length; i++)
     {
         var tok = expr[i];
@@ -528,6 +606,13 @@ function tokenize(expr) {
             continue;
         }
 
+        // Equals
+        if (char == '=')
+        {
+            tokens.push([Token.Punctuator, '=']);
+            continue;
+        }
+
         // Whitespace
         if (char == ' ')
             continue;
@@ -539,6 +624,7 @@ function tokenize(expr) {
 }
 
 // ----- Utility ----------
+
 function getWidth() {
     return ctx.canvas.width;
 }
@@ -548,6 +634,7 @@ function getHeight() {
 }
 
 // ----- Drawing ----------
+
 function draw(list, item)
 {
     item.draw();
@@ -593,6 +680,7 @@ function sizeCanvas() {
 }
 
 // ----- Equations ----------
+
 var equationCount = 0;
 
 function addEquation() {
@@ -610,99 +698,17 @@ function addEquation() {
     sidebar.appendChild(input);
 }
 
-// ----- Registry Test ----------
+// ----- Unit Tests ----------
+
+function registryTest() 
 {
-    // Marching Square Algorithm
-    // Cases obtained from https://en.wikipedia.org/wiki/Marching_squares
-    
-    const lookup = [
-        [ // cell 1 negative
-            [ // cell 2 negative
-                [ // cell 3 negative
-                    function() { // (0, 0, 0, 0)
-                        // do nothing
-                    },
-                    function() { // (0, 0, 0, 1)
-                        // triangle bottom left
-                    }
-                ],
-                [
-                    function() { // (0, 0, 1, 0)
-                        // triangle bottom right
-                    },
-                    function() { // (0, 0, 1, 1)
-                        // bottom half
-                    }
-                ]
-            ],
-            [ // cell 2 positive
-                [ // cell 3 negative
-                    function() { // (0, 1, 0, 0)
-                        // triangle top right
-                    },
-                    function() { // (0, 1, 0, 1)
-                        // ambiguous case (test center)
-                    }  
-                ],
-                [ // cell 3 positive
-                    function() { // (0, 1, 1, 0)
-                        // right half
-                    },
-                    function() { // (0, 1, 1, 1)
-                        // all but top left
-                    }
-                ]
-            ]
-        ],
-        [ // cell 1 positive
-            [ // cell 2 negative
-                [ // cell 3 negative
-                    function() { // (1, 0, 0, 0)
-                        // top left triangle
-                    },
-                    function() { // (1, 0, 0, 1)
-                        // left half
-                    }
-                ],
-                [ // cell 3 positive
-                    function() { // (1, 0, 1, 0)
-                        // ambiguous case (test center)
-                    },
-                    function() { // (1, 0, 1, 1)
-                        // all but top right
-                    }
-                ]
-            ],
-            [ // cell 2 positive
-                [ // cell 3 negative
-                    function() { // (1, 1, 0, 0)
-                        // top half
-                    },
-                    function() { // (1, 1, 0, 1)
-                        // all but bottom right
-                    } 
-                ],
-                [ // cell 3 positive
-                    function() { // (1, 1, 1, 0)
-                        // all but 
-                    },
-                    function() { // (1, 1, 1, 1)
-                        line(10, 10, 200, 200);
-                    }
-                ]
-            ]
-        ]
-    ];
-
-    lookup[1][1][1][1]();
-
-    // var variable = 'x';
-    // Registry.set(variable, 5);
-    // console.log(Registry.get(variable));
+    var variable = 'x';
+    Registry.set(variable, 5);
+    console.log(Registry.get(variable));
 }
 
-// ----- Expression Test ----------
-/* {
+function expressionTest() 
+{
     var constants = [];
     for (var i = 0; i <= 10; i++)
     {
@@ -714,4 +720,4 @@ function addEquation() {
     
     var add = new Expression(constants[1], mult, Operation.Add);
     console.log(add.evaluate());
-} */
+}
