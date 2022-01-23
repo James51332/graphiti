@@ -148,89 +148,47 @@ class Expression {
     sizeCanvas();
 
     grid();
-    //graphRaw("y-x^2");
 }
 
 // ----- Graphing ----------
 
-// The challenge here will be to create a system for representing equations
-// and parsing them from the user. My plan is to create a class representing an
-// expression which has two terms and an operation. A term can be a constant, 
-// a variable, or another expression. We can then fairly easily write a system 
-// to recursively evaluate an expression. When we want to graph, we'll convert the
-// user-defined equation into and implicit equation (y = x -> y - x = 0) and then use
-// the marching squares algorithm to graph. This will be the barebones of the graphing
-// engine.
-
-// I've gone ahead and implemented a couple of these features. I haven't written the marching squares algorithm yet
-// instead choosing to iterate and check how close a single point on each "tile" is to 0. This has the problem of where
-// some parts of the curve don't fall into the tolerance.
-
-function oppositeSign(x, y) {
-    return (x >= 0 && y <= 0) || (x <= 0 && y >= 0);
-}
-
-class Voxel {
-    constructor(l, t, size, expr) {
-        this.l = l;
-        this.t = t;
-        this.size = size;
-        this.expr = expr;
-    }
-
-    evaluate() {
-        // Point 1
-        Registry.set(Reserved.X, this.l);
-        Registry.set(Reserved.Y, this.t);
-        p1 = expr.evaluate();
-        // Point 2
-        Registry.set(Reserved.X, this.l + this.size);
-        Registry.set(Reserved.Y, this.t);
-        p2 = expr.evaluate();
-        // Point 3
-        Registry.set(Reserved.X, this.l + this.size);
-        Registry.set(Reserved.Y, this.t + this.size);
-        p3 = expr.evaluate();
-        // Point 4
-        Registry.set(Reserved.X, this.l);
-        Registry.set(Reserved.Y, this.t + this.size);
-        p4 = expr.evaluate();
-    }
-}
-
-function map(val, lower, upper, newLower, newUpper)
+function graph(expr)
 {
-    return ((val - lower) / (upper - lower)) * (newUpper - newLower) + newLower;
-}
-
-function graphRaw(expr)
-{
+    // Convert the string of characters into an array of tokens
     var toks = tokenize(expr);
+    if (toks === -1) 
+    {
+        console.log("Graphing failed because string couldn't be tokenized!");
+        return -1;
+    }
+
+    // Split the tokens into to expressions to be parsed
     var sides = splitTokens(toks);
-    
-    //console.log(sides);
+    if (sides === -1) 
+    {
+        console.log("Graphing failed because tokens couldn't be split!");
+        return -1;
+    }
 
     var lhs = parseTokens(sides[0]);
     var rhs = parseTokens(sides[1]);
-    
-    console.log("1");
+    if (lhs === -1 || rhs === -1)
+    {
+        console.log("Graphing failed because expression(s) couldn't be parsed!");
+        return -1;
+    }
 
     lhs = parseExpr(lhs);
-    console.log(lhs);
-
-    console.log("2");
-
     rhs = parseExpr(rhs);
-
-    console.log("3");
+    if (lhs === -1 || rhs === -1)
+    {
+        console.log("Graphing failed because expression(s) couldn't be converted!");
+        return -1;
+    }
 
     var expr = new Expression(lhs, rhs, Operation.Subtract);
-    console.log(expr);
-
-    // TODO: We can totally skip this process if the expression fails to evaluate.
 
     // let's try out our grid test
-    // we'll assume our expression is one side of an implicit equation
     var tileSize = 1;
     var canvasWidth = getWidth();
     var canvasHeight = getHeight();
@@ -244,8 +202,7 @@ function graphRaw(expr)
     var screenTop = 10;
     var screenBottom = -10;
     
-    // 01 - 20 - 22
-    // For the next commit, we'll drasticallly increase the efficiency of the algorithm
+    // TODO: We can drasticallly increase the efficiency of the algorithm here.
     // First off, we are computing the same data repeatedly because data is recomputed
     // for both sides of the tile. Secondly, mapping is a little bit inefficient. 
     // We should iterate through grid space instead, only mapping when we need to plot a point.
@@ -366,7 +323,7 @@ function graphRaw(expr)
 // which can more easily be converted into an abstract syntax tree, and therefore, an expression.
 
 function parseTokens(tokens)
-{
+{   
     var outputQueue = [];
     var operatorStack = [];
 
@@ -433,44 +390,64 @@ function parseTokens(tokens)
     return outputQueue;
 }
 
-// If we have an equation, we can just set
+// Split an array of tokens into two arrays if there is an equations. We also convert any equations
+// that can be graphed into two sets of tokens.
 function splitTokens(toks)
 {
+    // Loop through the array and ensure that there is only one '=' symbol.
     for (var i = 0; i < toks.length; i++)
     {
         var token = toks[i];
 
         if (token[0] == Token.Punctuator && token[1] == '=')
         {
-            // Ensure there is only one equals in equation
             for (var j = i + 1; j < toks.length; j++) 
             {
                 var tok = toks[j];
                 if (tok[0] == Token.Punctuator && tok[1] == '=')
-                    console.error("Only one equals allowed in equation!");
+                {
+                    console.log("Expression failed to parse because it contained more than on equals sign!")
+                    return -1;
+                }
             }
 
-            // Split equation into two expressions
+            // Split the equation into to sides and return them.
             var lhs = toks.slice(0, i);
             var rhs = toks.slice(i + 1, toks.length);
             return [lhs, rhs];
         }
-    
     }
 
     // If we haven't returned yet, then we are only parsing an expression. Allow this to be 
-    // equal to y. For instance, x^2 => x^2 = y
-    var rhs = [[Token.Variable, Reserved.Y]];
-    return [toks, rhs];
-}
+    // equal to y. For instance, x^2 => x^2 = y. Note that if the lhs uses, y, this isn't
+    // valid. Typing x*y shouldn't graph anything. We also should ensure there is at least
+    // one reference to the variable x.
 
-function parseInput(id)
-{
-    var raw = document.body.getElementsByClassName("equation")[id].value; // retrieve raw input
+    var referenceX = false, referenceY = false;
+    for (var i = 0; i < toks.length; i++)
+    {
+        var token = toks[i];
 
-    try { // test to see if the expression evaluates.
-        graphRaw(raw);
-    } catch {}
+        if (token[0] != Token.Variable)
+            continue;
+        else if (token[1] == Reserved.X) 
+            referenceX = true;
+        else if (token[1] == Reserved.Y)
+            referenceY = true;
+    }
+
+    if (referenceX && !referenceY)
+    {
+        var rhs = [[Token.Variable, Reserved.Y]];
+        return [toks, rhs];
+    } else
+    {
+        // No reason to throw an error here. We just go ahead and return -1
+        // to signal that this expression shouldn't be parsed. We could eventually
+        // implement some feature to evaluate and not necessarily graph, but that's
+        // out of the current scope.
+        return -1;
+    }
 }
 
 function isOpName(tok)
@@ -494,24 +471,24 @@ function parseExpr(expr)
             return expr[0];
     }
 
+    // This is pretty simple. We are going to rely on the parsing algorithm to guarantee that this is valid
+    // postfix notation. We go through the array and find the first operator, then we get the two tokens before it, and
+    // create an expression out of them. After that, we replace those three values in the array with
     for (var i = 0; i < expr.length; i++)
     {
-        var tok = expr[i];
+        var tok = expr[i]; // Get the current token.
+
         if (!isOpName(tok.Name)) // TODO: This isn't the most comfortable way to write this code. Revisit later.
             continue;
 
-        if (expr.indexOf(tok) < 2)
-        {
-            console.log("Parsing Error!");
-            return;
-        }
+        if (expr.indexOf(tok) < 2) return -1; // If there aren't two terms before the operator, we have a problem.
 
         var t1 = expr[i - 2];
         var t2 = expr[i - 1];
-
         var e = new Expression(t1, t2, tok);
-        expr.splice(i - 2, 3, e);
-        i=0;
+
+        expr.splice(i - 2, 3, e); // replace the three terms we just converted with an evaluable expression
+        i = 0;
 
         if (expr.length == 1)
             return e;
@@ -633,6 +610,17 @@ function getHeight() {
     return ctx.canvas.height;
 }
 
+// ----- Math ----------
+
+function map(val, lower, upper, newLower, newUpper)
+{
+    return ((val - lower) / (upper - lower)) * (newUpper - newLower) + newLower;
+}
+
+function oppositeSign(x, y) {
+    return (x >= 0 && y <= 0) || (x <= 0 && y >= 0);
+}
+
 // ----- Drawing ----------
 
 function draw(list, item)
@@ -696,6 +684,17 @@ function addEquation() {
     equationCount++;
 
     sidebar.appendChild(input);
+}
+
+function parseInput(id)
+{
+    var raw = document.body.getElementsByClassName("equation")[id].value;
+    
+    // It's not unlikely we could get errors here by evaluating something that isn't evaluable
+    // because we don't have sophisticated error detection yet.
+    try {
+        graph(raw);
+    } catch {}
 }
 
 // ----- Unit Tests ----------
