@@ -141,6 +141,104 @@ class Expression {
     }
 }
 
+class Equation {
+    constructor(lhs, rhs)
+    {
+        this.lhs = lhs;
+        this.rhs = rhs;
+    }
+}
+
+class Graph {
+    constructor(equation)
+    {
+        this.list = []; // like a grid, don't redraw our lines on resize
+        this.equation = equation;
+    }
+
+    async draw()
+    {
+        this.list.length = 0;
+
+        // Constants
+        var tileSize = 1;
+        var canvasWidth = getWidth();
+        var canvasHeight = getHeight();
+
+        // TODO: obtain these from the grid.
+        var screenLeft = -10;
+        var screenRight = 10;
+        var screenTop = 10;
+        var screenBottom = -10;
+        
+        // TODO: mapping is a little bit inefficient. 
+        // We should iterate through grid space instead, only mapping when we need to plot a point.
+        // We can can cache values to be efficient with our grid too. Once we start to be able to move
+        // the grid around with the mouse, this performance will be critical.
+        
+        var implicit = new Expression(this.equation.lhs, this.equation.rhs, Operation.Subtract);
+
+        var data = [];
+        for (var i = 0; i <= canvasWidth; i += tileSize)
+        {
+            var col = [];
+            data.push(col);
+        }
+
+        // Function to asynchronously evaluate a column
+        async function evalCol(data, row) {
+            for (var j = 0; j <= canvasHeight; j += tileSize) {
+                var x = map(row, 0, canvasWidth, screenLeft, screenRight);
+                var y = map(j, 0, canvasHeight, screenTop, screenBottom);
+
+                Registry.set(Reserved.X, x);
+                Registry.set(Reserved.Y, y);
+                var value = implicit.evaluate();
+
+                data[row].push(value);
+            }
+        }
+
+        // Run the calculation asynchronously
+        var promises = [];
+        for (var i = 0; i <= canvasWidth; i += tileSize)
+        {
+            promises.push(evalCol(data, i));
+        }
+        await Promise.all(promises);
+        
+        // Step 2) Draw
+        for (var i = 0; i < canvasWidth; i += tileSize)
+        {
+            // if there isn't another column after this, our algorithm won't work
+            if (i >= data.length - 1) break;
+
+            for (var j = 0; j < canvasHeight; j += tileSize)
+            {
+                // if there isn't another row after this, our algorithm won't work
+                if (j >= data[i].length - 1) break;
+
+                var p1 = data[i][j]; // top left
+                var p2 = data[i + 1][j]; // top right
+                var p3 = data[i + 1][j + 1]; // bottom right
+                var p4 = data[i][j + 1]; // bottom left
+
+                // TODO: One flaw with this system is that it graphs lines across asymptotes 
+                // because the sign of the implicit function changes. I'm not exactly sure how
+                // to fix this yet. One thing to note is the difference between the points will
+                // skip across infinities instead of zero. This could be a potential solution.
+                if (oppositeSign(p1, p2) 
+                    | oppositeSign(p2, p3)
+                    | oppositeSign(p3, p4)
+                    | oppositeSign(p4, p1))
+                {
+                    rect(i, j, tileSize, tileSize, this.list);
+                }
+            }
+        }
+    }
+}
+
 // ----- Entry ----------
 {
     // Resize Callback
@@ -148,104 +246,26 @@ class Expression {
     sizeCanvas();
 
     grid();
+
+    var equation = parse("x^2");
+    var graph = new Graph(equation);
+    draw(drawList, graph);
 }
 
 // ----- Graphing ----------
 
-function graph(string)
+function graphR(string)
 {
     // Parse our string
-    var expr = parse(string);
-    if (expr === -1)
+    var equation = parse(string);
+    if (equation === -1)
     {
         console.log("Graphing failed because string couldn't be parsed!");
         return;
     }
 
-    // Constants
-    var tileSize = 1;
-    var canvasWidth = getWidth();
-    var canvasHeight = getHeight();
-
-    // TODO: obtain these from the grid.
-    var screenLeft = -10;
-    var screenRight = 10;
-    var screenTop = 10;
-    var screenBottom = -10;
-    
-    // TODO: mapping is a little bit inefficient. 
-    // We should iterate through grid space instead, only mapping when we need to plot a point.
-    // We can can cache values to be efficient with our grid too. Once we start to be able to move
-    // the grid around with the mouse, this performance will be critical.
-
-    // TODO: parallelization?
-    // https://medium.com/serverlessguru/executing-code-in-parallel-javascript-a93740190c86
-    
-    // Iterate through the array and compute the value of our equation at every point.
-    var data = [];
-    for (var i = 0; i <= canvasWidth; i += tileSize)
-    {
-        var col = [];
-        data.push(col);
-
-        for (var j = 0; j <= canvasHeight; j += tileSize)
-        {
-            var x = map(i, 0, canvasWidth, screenLeft, screenRight);
-            var y = map(j, 0, canvasHeight, screenTop, screenBottom);
-            
-            Registry.set(Reserved.X, x);
-            Registry.set(Reserved.Y, y);
-            var value = expr.evaluate();
-            
-            data[i].push(value);
-        }
-    }
-
-    // Next using the marching squares algoritm on every "tile" in our array.
-    for (var i = 0; i < canvasWidth; i += tileSize)
-    {
-        // if there isn't another columns after this, our algorithm won't work
-        if (i >= data.length - 1) break;
-
-        for (var j = 0; j < canvasHeight; j += tileSize)
-        {
-            // if there isn't another row after this, our algorithm won't work
-            if (j >= data[i].length - 1) break;
-
-            var p1 = data[i][j]; // top left
-            var p2 = data[i + 1][j]; // top right
-            var p3 = data[i + 1][j + 1]; // bottom right
-            var p4 = data[i][j + 1]; // bottom left
-
-            // Marching Square Algorithm
-            // Cases obtained from https://en.wikipedia.org/wiki/Marching_square
-            // Instead of using cases to draw the right curve, we are just draw lines from the points
-            // where the sign switchs on the implicit equation.
-
-            var points = [];
-            if (oppositeSign(p1, p2)) 
-            {
-                points.push(new Vec2(i + tileSize/2, j)); // TODO: linear interpolation
-            }
-            if (oppositeSign(p2, p3))
-            {
-                points.push(new Vec2(i + tileSize, j + tileSize/2));
-            }
-            if (oppositeSign(p3, p4))
-            {
-                points.push(new Vec2(i + tileSize/2, j + tileSize));
-            }
-            if (oppositeSign(p4, p1))
-            {
-                points.push(new Vec2(i, j + tileSize/2));
-            }
-
-            for (var k = 0; k + 1 < points.length; k += 2)
-            {
-                line(points[k].x, points[k].y, points[k + 1].x, points[k + 1].y);
-            }
-        }
-    }
+    var graph = new Graph(equation);
+    draw(drawList, graph); 
 }
 
 // ----- Parsing ----------
@@ -292,7 +312,7 @@ function parse(string) {
         return -1;
     }
 
-    return new Expression(lhs, rhs, Operation.Subtract);
+    return new Equation(lhs, rhs);
 }
 
 // Another thing to note is that we have essentially **NO** safe error checking. We could switch
@@ -696,12 +716,7 @@ function addEquation() {
 function parseInput(id)
 {
     var raw = document.body.getElementsByClassName("equation")[id].value;
-    
-    // It's not unlikely we could get errors here by evaluating something that isn't evaluable
-    // because we don't have sophisticated error detection yet.
-    try {
-        graph(raw);
-    } catch {}
+    graphR(raw);
 }
 
 // ----- Unit Tests ----------
