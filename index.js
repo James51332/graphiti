@@ -5,15 +5,16 @@ var drawList = [];
 var graphList = [];
 
 // ----- Primitives ----------
-const Token = {
-    Constant: 'Constant',
-    Variable: 'Variable',
-    Operator: 'Operator',
-    Punctuator: 'Punctuator'
+
+const Operation = {
+    Add: {Name: 'Add', Precedence: 1, Left: true},
+    Subtract: {Name: 'Subtract', Precedence: 1, Left: true},
+    Multiply: {Name: 'Multiply', Precedence: 2, Left: true},
+    Divide: {Name: 'Divide', Precedence: 2, Left: true},
+    Exponent: {Name: 'Exponent', Precedence: 3, Left: false},
 };
 
-const TokenCategory = {
-    // TODO: These will become the tokens
+const TokenType = {
     None: 0, 
     Constant: 1 << 0,
     Variable: 1 << 1,
@@ -21,21 +22,30 @@ const TokenCategory = {
     OpeningParenthesis: 1 << 3,
     ClosingParenthesis: 1 << 4,
     Equals: 1 << 5,
-
-    // TODO: These will become the categories
-    Punctuator: (1 << 3 | 1 << 4 | 1 << 5),
-    Operand: (1 << 0 | 1 << 1),
-    Any: ((1 << 6) - 1)
 };
 
-const Operation = {
-    Add: {Name: 'Add', Precedence: 1},
-    Subtract: {Name: 'Subtract', Precedence: 1},
-    Multiply: {Name: 'Multiply', Precedence: 2},
-    Divide: {Name: 'Divide', Precedence: 2},
-    Exponent: {Name: 'Exponent', Precedence: 3},
+const TokenCategory = {
+    Punctuator: (TokenType.OpeningParenthesis | TokenType.ClosingParenthesis | TokenType.Equals),
+    Operand: (TokenType.Constant | TokenType.Variable),
+    Operator: TokenType.Operator, 
+    Any: (TokenType.Constant | TokenType.Variable | TokenType.Operator | TokenType.OpeningParenthesis | TokenType.ClosingParenthesis | TokenType.Equals)
 };
 
+class Token {
+    constructor(type, category, value)
+    {
+        this.type = type;
+        this.category = category;
+        this.value = value;
+    }
+
+    static match(lhs, rhs)
+    {
+        // Token types and category are created so that a bitwise and 
+        // will evaluate to true when the categories match.
+        return (lhs & rhs);
+    }
+}
 
 class Vec2 {
     constructor(x, y)
@@ -266,6 +276,9 @@ class Graph {
     sizeCanvas();
 
     grid();
+
+    var tokens = tokenize("x^(x");
+    console.log(validate(tokens));
 }
 
 // ----- Parsing ----------
@@ -287,57 +300,55 @@ class Graph {
 
 function validate(tokens)
 {
-    console.log(TokenCategory, tokens);
-
-    var last = TokenCategory.None;
-    var expected = (TokenCategory.Operand | TokenCategory.OpeningParenthesis);
+    var last = TokenType.None;
+    var expected = (TokenCategory.Operand | TokenType.OpeningParenthesis);
     var parenthesis = 0;
 
     for (var i = 0; i < tokens.length; i++)
     {
         // Step 1) Determine allowable tokens
-        if (last != TokenCategory.None) // For all calls except for first
+        if (last != TokenType.None) // For all calls except for first
         {
-            if (last & TokenCategory.Operator) // Operator
+            if (Token.match(last, TokenCategory.Operator)) // Operator
             {
-                expected = TokenCategory.Operand | TokenCategory.OpeningParenthesis;
+                expected = TokenCategory.Operand | TokenType.OpeningParenthesis;
             }
-            else if (last & TokenCategory.Punctuator) // Punctuator
+            else if (Token.match(last, TokenCategory.Punctuator)) // Punctuator
             {
-                if (last == TokenCategory.OpeningParenthesis)
+                if (last == TokenType.OpeningParenthesis)
                     expected == TokenCategory.Operand;
-                else if (last == TokenCategory.ClosingParenthesis)
-                    expected == TokenCategory.OpeningParenthesis | TokenCategory.Operator | TokenCategory.Operand;
+                else if (last == TokenType.ClosingParenthesis)
+                    expected == TokenType.OpeningParenthesis | TokenType.Operator | TokenCategory.Operand;
             }
-            else if (last & TokenCategory.Operand) // Operand
+            else if (Token.match(last, TokenCategory.Operand)) // Operand
             {
-                expected = TokenCategory.Operator | TokenCategory.Variable | TokenCategory.OpeningParenthesis | TokenCategory.ClosingParenthesis;
+                expected = TokenType.Operator | TokenType.Variable | TokenType.OpeningParenthesis | TokenType.ClosingParenthesis;
             }
         }
         
         // Step 2) Verify token is allowable
         var token = tokens[i];
-        var category = tokenCategory(token);
-        
-        console.log(last, category, expected, category & expected);
-        if (!(category & expected)) 
+        var category = token.category;
+        var type = token.type;
+
+        if (!Token.match(category, expected)) 
         { 
-            console.log("Unexpected token: ", token[1]);
+            console.log("Unexpected token: ", token.value);
             return false; 
         }
 
         // Step 3) Increment or decrement parenthesis counter
-        if (category == TokenCategory.OpeningParenthesis)
+        if (type == TokenType.OpeningParenthesis)
             parenthesis++;
-        else if (category == TokenCategory.ClosingParenthesis)
+        else if (type == TokenType.ClosingParenthesis)
             parenthesis--;
 
         var last = category;
     }
 
     // Step 4) Verify last token
-    expected = TokenCategory.Operand | TokenCategory.ClosingParenthesis;
-    if (!(last & expected))
+    expected = TokenCategory.Operand | TokenType.ClosingParenthesis;
+    if (!Token.match(last, expected))
     {
         console.log("Unexpected end of expression!");
         return false;
@@ -350,24 +361,8 @@ function validate(tokens)
         return false;
     }
 
-    // If all else succeeds, our expression is valid
+    // Step 6) If all else succeeds, our expression is valid
     return true;
-}
-
-// TODO: Merge Token and TokenCategory into single type. This is temporary
-// because Token isn't well designed but the current algorithm relies on it.
-function tokenCategory(token) {
-    switch (token[0])
-    {
-        case Token.Operator: return TokenCategory.Operator;
-        case Token.Punctuator: {
-            if (token[1] == '(') return TokenCategory.OpeningParenthesis;
-            if (token[1] == ')') return TokenCategory.ClosingParenthesis;
-        }
-        case Token.Constant: return TokenCategory.Constant;
-        case Token.Variable: return TokenCategory.Variable;
-        default: TokenCategory.None;
-    }    
 }
 
 // I want to take a minute to breakdown the pipeline for converting from a string a text to a parsed
@@ -381,6 +376,7 @@ function tokenCategory(token) {
 function parse(string) {
     // Convert the string of characters into an array of tokens
     var toks = tokenize(string);
+    console.log(toks);
     if (toks === -1) 
     {
         console.log("Parsing failed because string couldn't be tokenized!");
@@ -389,14 +385,23 @@ function parse(string) {
 
     // Split the tokens into to expressions to be parsed
     var sides = splitTokens(toks);
+    console.log(sides);
     if (sides === -1) 
     {
         console.log("Parsing failed because tokens couldn't be split!");
         return -1;
     }
 
+    var valid = validate(sides[0]) && validate(sides[1]);
+    if (!valid)
+    {
+        console.log("Parsing failed because expression(s) were invalid!");
+        return -1;
+    }
+
     var lhs = parseTokens(sides[0]);
     var rhs = parseTokens(sides[1]);
+    console.log(lhs, rhs);
     if (lhs === -1 || rhs === -1)
     {
         console.log("Parsing failed because expression(s) couldn't be parsed!");
@@ -405,6 +410,7 @@ function parse(string) {
 
     lhs = parseExpr(lhs);
     rhs = parseExpr(rhs);
+    console.log(lhs, rhs);
     if (lhs === -1 || rhs === -1)
     {
         console.log("Parsing failed because expression(s) couldn't be converted!");
@@ -434,9 +440,7 @@ function parse(string) {
 // Here's the algorithm
 // 1. Read a token. Let’s call it t
 // 2. If t is a Literal or Variable, push it to the output queue.
-// 3. If t is a Function, push it onto the stack.
-// 4. If t is a Function Argument Separator (a comma), pop operators off the stack onto the output queue until the token at the top of the stack is a Left Parenthesis.
-// 5. If t is an Operator:
+// 3. If t is an Operator:
     // a. while there is an Operator token o at the top of the operator stack and either t is left-associative and has precedence is less than or equal to that of o, or t is right associative, and has precedence less than that of o, pop o off the operator stack, onto the output queue;
     // b. at the end of iteration push t onto the operator stack.
 // 6. If the token is a Left Parenthesis, push it onto the stack.
@@ -444,38 +448,36 @@ function parse(string) {
 // 8. If the token at the top of the stack is a Function, pop it onto the output queue.
 // When there are no more tokens to read, pop any Operator tokens on the stack onto the output queue.
 // Exit.
-
-// This function uses the shunting-yard algorithm to convert the token list into postfix notation
-// which can more easily be converted into an abstract syntax tree, and therefore, an expression.
 function parseTokens(tokens)
 {   
     var outputQueue = [];
     var operatorStack = [];
 
-    // TODO: Parsing Validation
+    var last = TokenType.None;
+
     for (var i = 0; i < tokens.length; i++)
     {
         var token = tokens[i];
 
-        // Parse Numbers
-        if (token[0] == Token.Constant)
+        // Parse Constants
+        if (token.type == TokenType.Constant)
         {
-            
-
-            outputQueue.push(new Constant(token[1]));
+            outputQueue.push(new Constant(token.value));
         }
 
         // Parse Variables
-        if (token[0] == Token.Variable)
-            outputQueue.push(new Variable(token[1]));
+        if (token.type == TokenType.Variable)
+        {
+            outputQueue.push(new Variable(token.value));
+        }
 
         // Handle Parenthesis
-        if (token[0] == Token.Punctuator)
+        if (Token.match(token.category, TokenCategory.Punctuator))
         {
-            if (token[1] == '(')
+            if (token.type == TokenType.OpeningParenthesis)
                 operatorStack.push('(');
             
-            if (token[1] == ')')
+            if (token.type == TokenType.ClosingParenthesis)
             {
                 while (true)
                 {
@@ -488,15 +490,15 @@ function parseTokens(tokens)
         }
 
         // Operator Stack
-        if (token[0] == Token.Operator)
+        if (token.type == TokenType.Operator)
         {
-            var op = token[1];
+            var op = token.value;
 
             while (operatorStack.length > 0)
             {
                 var prevOp = operatorStack[operatorStack.length - 1];
 
-                if (prevOp.Precedence > op.Precedence)
+                if (prevOp.Precedence > op.Precedence || prevOp.Precedence == op.Precedence && prevOp.left == true)
                 {
                     operatorStack.pop();
                     outputQueue.push(prevOp);
@@ -509,7 +511,7 @@ function parseTokens(tokens)
             operatorStack.push(op);
         }
 
-        last = token;
+        last = token.type;
     }
 
     // Pop remaining stack to output
@@ -530,12 +532,12 @@ function splitTokens(toks)
     {
         var token = toks[i];
 
-        if (token[0] == Token.Punctuator && token[1] == '=')
+        if (token.category == TokenCategory.Punctuator && token.value == '=')
         {
             for (var j = i + 1; j < toks.length; j++) 
             {
                 var tok = toks[j];
-                if (tok[0] == Token.Punctuator && tok[1] == '=')
+                if (tok.category == TokenCategory.Punctuator && tok.value == '=')
                 {
                     console.log("Expression failed to parse because it contained more than on equals sign!");
                     return -1;
@@ -559,17 +561,17 @@ function splitTokens(toks)
     {
         var token = toks[i];
 
-        if (token[0] != Token.Variable)
+        if (token.type != TokenType.Variable)
             continue;
-        else if (token[1] == Reserved.X) 
+        else if (token.value == Reserved.X) 
             referenceX = true;
-        else if (token[1] == Reserved.Y)
+        else if (token.value == Reserved.Y)
             referenceY = true;
     }
 
     if (referenceX && !referenceY)
     {
-        var rhs = [[Token.Variable, Reserved.Y]];
+        var rhs = [new Token(TokenType.Variable, TokenCategory.Operand, Reserved.Y)];
         return [toks, rhs];
     } else
     {
@@ -646,11 +648,12 @@ function isOperator(str) {
 function tokenize(expr) {
 
     var tokens = [];
+    var last = TokenType.None;
 
     for (var i = 0; i < expr.length; i++) // Loop through each character in the string.
     {
         var char = expr.charAt(i); // get the current character
-        
+
         // Constants
         if (isNumeric(char)) 
         {
@@ -669,10 +672,15 @@ function tokenize(expr) {
                 // we don't need to parse the next character now.
                 i++;
             }
-            
+
+            if (last == TokenType.ClosingParenthesis) // implicit multiplication
+                tokens.push(new Token(TokenType.Operator, TokenCategory.Operator, Operation.Multiply));
+
             // once we've parsed the constant, push it and skip to next token.
-            tokens.push([Token.Constant, value]);
+            tokens.push(new Token(TokenType.Constant, TokenCategory.Operand, value));
+            last = TokenType.Constant;
             continue;
+            
         }
 
         // Operators
@@ -688,36 +696,51 @@ function tokenize(expr) {
                 case '^': { op = Operation.Exponent; break; }
             }
             
-            tokens.push([Token.Operator, op]);
+            tokens.push(new Token(TokenType.Operator, TokenCategory.Operator, op));
+            last = TokenType.Operator
             continue;
         }
 
         // X & Y
-        if (char.toLowerCase() == 'x')
+        if (char == 'x')
         {
-            tokens.push([Token.Variable, Reserved.X]);
+            if (last == TokenType.ClosingParenthesis | Token.match(last, TokenCategory.Operand)) // implicit multiplication
+                tokens.push(new Token(TokenType.Operator, TokenCategory.Operator, Operation.Multiply));
+
+            tokens.push(new Token(TokenType.Variable, TokenCategory.Operand, Reserved.X));
+            last = TokenType.Variable;
             continue;
-        } else if (char.toLowerCase() == 'y')
+        } else if (char == 'y')
         {
-            tokens.push([Token.Variable, Reserved.Y]);
+            if (last == TokenType.ClosingParenthesis | Token.match(last, TokenCategory.Operand)) // implicit multiplication
+                tokens.push(new Token(TokenType.Operator, TokenCategory.Operator, Operation.Multiply));
+
+            tokens.push(new Token(TokenType.Variable, TokenCategory.Operand, Reserved.Y));
+            last = TokenType.Variable;
             continue;
         }
 
         // Parenthesis
         if (char == '(')
         {
-            tokens.push([Token.Punctuator, '(']);
+            if (last == TokenType.ClosingParenthesis | Token.match(last, TokenCategory.Operand)) // implicit multiplication
+                tokens.push(new Token(TokenType.Operator, TokenCategory.Operator, Operation.Multiply));
+
+            tokens.push(new Token(TokenType.OpeningParenthesis, TokenCategory.Punctuator, '('));
+            last = TokenType.OpeningParenthesis;
             continue;
         } else if (char == ')')
         {
-            tokens.push([Token.Punctuator, ')']);
+            tokens.push(new Token(TokenType.ClosingParenthesis, TokenCategory.Punctuator, ')'));
+            last = TokenType.ClosingParenthesis;
             continue;
         }
 
         // Equals
         if (char == '=')
         {
-            tokens.push([Token.Punctuator, '=']);
+            tokens.push(new Token(TokenType.Equals, TokenCategory.Punctuator, '='));
+            last = TokenType.Equals;
             continue;
         }
 
@@ -725,7 +748,8 @@ function tokenize(expr) {
         if (char == ' ')
             continue;
 
-        console.error("Unknown token: " + char);
+        console.log("Unknown token: " + char);
+        return -1;
     }
 
     return tokens;
@@ -837,12 +861,8 @@ function parseInput(id)
     
     // Parse our string
     var equation = parse(raw);
-    if (equation === -1)
-    {
-        console.log("Graphing failed because string couldn't be parsed!");
-    }
-    
     var graph = new Graph(equation);
+    
     if (equationCount > graphList.length)
     {
         graphList.push(graph);
