@@ -12,6 +12,22 @@ const Token = {
     Punctuator: 'Punctuator'
 };
 
+const TokenCategory = {
+    // TODO: These will become the tokens
+    None: 0, 
+    Constant: 1 << 0,
+    Variable: 1 << 1,
+    Operator: 1 << 2,
+    OpeningParenthesis: 1 << 3,
+    ClosingParenthesis: 1 << 4,
+    Equals: 1 << 5,
+
+    // TODO: These will become the categories
+    Punctuator: (1 << 3 | 1 << 4 | 1 << 5),
+    Operand: (1 << 0 | 1 << 1),
+    Any: ((1 << 6) - 1)
+};
+
 const Operation = {
     Add: {Name: 'Add', Precedence: 1},
     Subtract: {Name: 'Subtract', Precedence: 1},
@@ -20,6 +36,7 @@ const Operation = {
     Exponent: {Name: 'Exponent', Precedence: 3},
 };
 
+
 class Vec2 {
     constructor(x, y)
     {
@@ -27,6 +44,8 @@ class Vec2 {
         this.y = y;
     }
 }
+
+// ----- Drawables ----------
 
 class Line {
     constructor(pos1, pos2)
@@ -71,6 +90,8 @@ class Grid {
     }
 }
 
+// ----- Constant ----------
+
 class Constant {
     constructor(value)
     {
@@ -82,8 +103,8 @@ class Constant {
     }
 }
 
-// For now, we'll only support x and y as our variables for equations.
-// User-defined variables are totally a possibility in the future.
+// ----- Variables ----------
+
 const Reserved = {
     X: Symbol('x'),
     Y: Symbol('y')
@@ -120,6 +141,8 @@ class Variable
     }
 }
 
+// ----- Equations ----------
+
 class Expression {
     constructor(term1, term2, op)
     {
@@ -155,13 +178,12 @@ class Equation {
 class Graph {
     constructor(equation)
     {
-        this.list = []; // like a grid, don't redraw our lines on resize
         this.equation = equation;
     }
 
     async draw()
     {
-        this.list.length = 0;
+        if (this.equation == -1) return;
 
         // Constants
         var tileSize = 1;
@@ -173,11 +195,6 @@ class Graph {
         var screenRight = 10;
         var screenTop = 10;
         var screenBottom = -10;
-        
-        // TODO: mapping is a little bit inefficient. 
-        // We should iterate through grid space instead, only mapping when we need to plot a point.
-        // We can can cache values to be efficient with our grid too. Once we start to be able to move
-        // the grid around with the mouse, this performance will be critical.
         
         var implicit = new Expression(this.equation.lhs, this.equation.rhs, Operation.Subtract);
 
@@ -235,7 +252,7 @@ class Graph {
                     | oppositeSign(p3, p4)
                     | oppositeSign(p4, p1))
                 {
-                    rect(i, j, tileSize, tileSize, this.list);
+                    rect(i, j, tileSize, tileSize, -1);
                 }
             }
         }
@@ -253,7 +270,106 @@ class Graph {
 
 // ----- Parsing ----------
 
-// 01 - 21 - 22
+// Here's my implementation for an error detection algorithm:
+// Iterate through the array, knowing we must start with an operand or opening parenthesis:
+
+// 1. If the last token we parsed was an operator, we can have an operand or opening parenthesis.
+// 2. If the last token we parsed was a punctuator, there are a few options that could come next:
+    // a. after an opening parenthesis, we can only accept an operand.
+    // b. after a closing parenthesis, we can accept an opening parenthesis (implicit multiplication), an operator, or an operand.
+// 3. If the last token we parsed was an operand, there are several possibilities:
+    // a. we can accept a operator.
+    // b. we can accept a variable (implicit multiplication).
+    // c. we can accept an opening parenthesis (implicit multiplication).
+    // d. we can accept a closing parenthesis (closing expression).
+
+// We also need to guarantee that we end on an operand or a closing parenthesis. and that all of our parenthesis are closed out.
+
+function validate(tokens)
+{
+    console.log(TokenCategory, tokens);
+
+    var last = TokenCategory.None;
+    var expected = (TokenCategory.Operand | TokenCategory.OpeningParenthesis);
+    var parenthesis = 0;
+
+    for (var i = 0; i < tokens.length; i++)
+    {
+        // Step 1) Determine allowable tokens
+        if (last != TokenCategory.None) // For all calls except for first
+        {
+            if (last & TokenCategory.Operator) // Operator
+            {
+                expected = TokenCategory.Operand | TokenCategory.OpeningParenthesis;
+            }
+            else if (last & TokenCategory.Punctuator) // Punctuator
+            {
+                if (last == TokenCategory.OpeningParenthesis)
+                    expected == TokenCategory.Operand;
+                else if (last == TokenCategory.ClosingParenthesis)
+                    expected == TokenCategory.OpeningParenthesis | TokenCategory.Operator | TokenCategory.Operand;
+            }
+            else if (last & TokenCategory.Operand) // Operand
+            {
+                expected = TokenCategory.Operator | TokenCategory.Variable | TokenCategory.OpeningParenthesis | TokenCategory.ClosingParenthesis;
+            }
+        }
+        
+        // Step 2) Verify token is allowable
+        var token = tokens[i];
+        var category = tokenCategory(token);
+        
+        console.log(last, category, expected, category & expected);
+        if (!(category & expected)) 
+        { 
+            console.log("Unexpected token: ", token[1]);
+            return false; 
+        }
+
+        // Step 3) Increment or decrement parenthesis counter
+        if (category == TokenCategory.OpeningParenthesis)
+            parenthesis++;
+        else if (category == TokenCategory.ClosingParenthesis)
+            parenthesis--;
+
+        var last = category;
+    }
+
+    // Step 4) Verify last token
+    expected = TokenCategory.Operand | TokenCategory.ClosingParenthesis;
+    if (!(last & expected))
+    {
+        console.log("Unexpected end of expression!");
+        return false;
+    }
+
+    // Step 5) Ensure parenthesis are all matched
+    if (parenthesis != 0)
+    {
+        console.log("Unmatched parenthesis");
+        return false;
+    }
+
+    // If all else succeeds, our expression is valid
+    return true;
+}
+
+// TODO: Merge Token and TokenCategory into single type. This is temporary
+// because Token isn't well designed but the current algorithm relies on it.
+function tokenCategory(token) {
+    switch (token[0])
+    {
+        case Token.Operator: return TokenCategory.Operator;
+        case Token.Punctuator: {
+            if (token[1] == '(') return TokenCategory.OpeningParenthesis;
+            if (token[1] == ')') return TokenCategory.ClosingParenthesis;
+        }
+        case Token.Constant: return TokenCategory.Constant;
+        case Token.Variable: return TokenCategory.Variable;
+        default: TokenCategory.None;
+    }    
+}
+
 // I want to take a minute to breakdown the pipeline for converting from a string a text to a parsed
 // equation. This will allow us to maintain a larger codebase. Here are the steps:
 
@@ -331,19 +447,10 @@ function parse(string) {
 
 // This function uses the shunting-yard algorithm to convert the token list into postfix notation
 // which can more easily be converted into an abstract syntax tree, and therefore, an expression.
-
-// Here is my approach
-const TokenCategory = {
-    Operand: 'Operand',
-    Operator: 'Operator',
-    Punctuator: 'Punctuator'
-};
-
 function parseTokens(tokens)
 {   
     var outputQueue = [];
     var operatorStack = [];
-    var last;
 
     // TODO: Parsing Validation
     for (var i = 0; i < tokens.length; i++)
@@ -353,6 +460,8 @@ function parseTokens(tokens)
         // Parse Numbers
         if (token[0] == Token.Constant)
         {
+            
+
             outputQueue.push(new Constant(token[1]));
         }
 
@@ -399,6 +508,8 @@ function parseTokens(tokens)
 
             operatorStack.push(op);
         }
+
+        last = token;
     }
 
     // Pop remaining stack to output
@@ -426,7 +537,7 @@ function splitTokens(toks)
                 var tok = toks[j];
                 if (tok[0] == Token.Punctuator && tok[1] == '=')
                 {
-                    console.log("Expression failed to parse because it contained more than on equals sign!")
+                    console.log("Expression failed to parse because it contained more than on equals sign!");
                     return -1;
                 }
             }
@@ -646,7 +757,7 @@ function oppositeSign(x, y) {
 function draw(list, item)
 {
     item.draw();
-    list.push(item);
+    if (list != -1) list.push(item);
 }
 
 function clear() {
@@ -691,10 +802,9 @@ function grid(left = -10, right = 10, bottom = -10, top = 10, list = drawList) {
     draw(list, grid);
 }
 
-// Note: There is no function that draws a graph as a primitive because, graphs should be cleared without 
-
-// Resize Callback
+// ----- Resize Callback ----------
 function sizeCanvas() {
+    // The canvas thinks it's the full screen if we don't do this
     ctx.canvas.width = window.innerWidth * 0.75;
     ctx.canvas.height = window.innerHeight;
 
@@ -740,31 +850,6 @@ function parseInput(id)
     } else
     {
         graphList[id] = graph;
-        console.log('test');
         redraw();
     }
-}
-
-// ----- Unit Tests ----------
-
-function registryTest() 
-{
-    var variable = 'x';
-    Registry.set(variable, 5);
-    console.log(Registry.get(variable));
-}
-
-function expressionTest() 
-{
-    var constants = [];
-    for (var i = 0; i <= 10; i++)
-    {
-        constants.push(new Constant(i));
-    }
-
-    var mult = new Expression(constants[5], constants[2], Operation.Multiply);
-    console.log(mult.evaluate());
-    
-    var add = new Expression(constants[1], mult, Operation.Add);
-    console.log(add.evaluate());
 }
