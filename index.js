@@ -1,7 +1,8 @@
 // ----- Globals ----------
 var canvas = document.getElementById("grid");    
 var ctx = canvas.getContext("2d");
-var drawList = []; // We should create a graph primitve that will store it's own draw list
+var drawList = [];
+var graphList = [];
 
 // ----- Primitives ----------
 const Token = {
@@ -149,6 +150,8 @@ class Equation {
     }
 }
 
+// ----- Graphing ----------
+
 class Graph {
     constructor(equation)
     {
@@ -246,26 +249,6 @@ class Graph {
     sizeCanvas();
 
     grid();
-
-    var equation = parse("x^2");
-    var graph = new Graph(equation);
-    draw(drawList, graph);
-}
-
-// ----- Graphing ----------
-
-function graphR(string)
-{
-    // Parse our string
-    var equation = parse(string);
-    if (equation === -1)
-    {
-        console.log("Graphing failed because string couldn't be parsed!");
-        return;
-    }
-
-    var graph = new Graph(equation);
-    draw(drawList, graph); 
 }
 
 // ----- Parsing ----------
@@ -349,10 +332,18 @@ function parse(string) {
 // This function uses the shunting-yard algorithm to convert the token list into postfix notation
 // which can more easily be converted into an abstract syntax tree, and therefore, an expression.
 
+// Here is my approach
+const TokenCategory = {
+    Operand: 'Operand',
+    Operator: 'Operator',
+    Punctuator: 'Punctuator'
+};
+
 function parseTokens(tokens)
 {   
     var outputQueue = [];
     var operatorStack = [];
+    var last;
 
     // TODO: Parsing Validation
     for (var i = 0; i < tokens.length; i++)
@@ -361,7 +352,9 @@ function parseTokens(tokens)
 
         // Parse Numbers
         if (token[0] == Token.Constant)
+        {
             outputQueue.push(new Constant(token[1]));
+        }
 
         // Parse Variables
         if (token[0] == Token.Variable)
@@ -657,8 +650,24 @@ function draw(list, item)
 }
 
 function clear() {
-    ctx.clear();
+    ctx.clearRect(0, 0, getWidth(), getHeight());
     drawList.clear();
+}
+
+function redraw()
+{
+    ctx.clearRect(0, 0, getWidth(), getHeight());
+
+    // Redraw All Elements
+    for (var i = 0; i < drawList.length; i++)
+    {
+        drawList[i].draw();
+    }
+    
+    for (var i = 0; i < graphList.length; i++)
+    {
+        graphList[i].draw();
+    }
 }
 
 function line(x1, y1, x2, y2, list = drawList)
@@ -682,16 +691,14 @@ function grid(left = -10, right = 10, bottom = -10, top = 10, list = drawList) {
     draw(list, grid);
 }
 
+// Note: There is no function that draws a graph as a primitive because, graphs should be cleared without 
+
 // Resize Callback
 function sizeCanvas() {
     ctx.canvas.width = window.innerWidth * 0.75;
     ctx.canvas.height = window.innerHeight;
 
-    // Redraw All Elements
-    for (var i = 0; i < drawList.length; i++)
-    {
-        drawList[i].draw();
-    }
+    redraw();
 }
 
 // ----- Equations ----------
@@ -715,8 +722,27 @@ function addEquation() {
 
 function parseInput(id)
 {
+    // Retrieve input
     var raw = document.body.getElementsByClassName("equation")[id].value;
-    graphR(raw);
+    
+    // Parse our string
+    var equation = parse(raw);
+    if (equation === -1)
+    {
+        console.log("Graphing failed because string couldn't be parsed!");
+    }
+    
+    var graph = new Graph(equation);
+    if (equationCount > graphList.length)
+    {
+        graphList.push(graph);
+        graph.draw();
+    } else
+    {
+        graphList[id] = graph;
+        console.log('test');
+        redraw();
+    }
 }
 
 // ----- Unit Tests ----------
