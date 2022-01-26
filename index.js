@@ -276,9 +276,6 @@ class Graph {
     sizeCanvas();
 
     grid();
-
-    var tokens = tokenize("x^(x");
-    console.log(validate(tokens));
 }
 
 // ----- Parsing ----------
@@ -772,8 +769,9 @@ function map(val, lower, upper, newLower, newUpper)
     return ((val - lower) / (upper - lower)) * (newUpper - newLower) + newLower;
 }
 
+// treat zero as positive
 function oppositeSign(x, y) {
-    return (x >= 0 && y <= 0) || (x <= 0 && y >= 0);
+    return (x >= 0 && y < 0) || (x < 0 && y >= 0);
 }
 
 // ----- Drawing ----------
@@ -842,16 +840,28 @@ var equationCount = 0;
 function addEquation() {
     var sidebar = document.getElementsByClassName("sidebar")[0];
 
+    var inputDiv = document.createElement("div");
+    inputDiv.classList.add("container");
+    
     var input = document.createElement("input");
     input.type = "text";
-    input.placeholder = "Write your equation!";
     input.classList.add("equation");
+    
     
     var id = equationCount; // copy id now so that it's stored
     input.oninput = function() { parseInput(id); }
     equationCount++;
+    
+    inputDiv.appendChild(input);
 
-    sidebar.appendChild(input);
+    var left = document.createElement("div");
+    left.classList.add("left");
+    var num = document.createElement("h3");
+    num.innerHTML = id + 1;
+    left.appendChild(num);
+    inputDiv.appendChild(left);
+
+    sidebar.appendChild(inputDiv);
 }
 
 function parseInput(id)

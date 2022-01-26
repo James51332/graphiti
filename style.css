@@ -1,6 +1,25 @@
-html, body {
+html {
     padding: 0;
     margin: 0;
+    overflow: hidden;
+}
+
+body {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding:0;
+    margin:0;
+    overflow: auto;
+}
+
+:root {
+    --sidemenu-height: 55px;
+    --color-two: #C84B31;
+    --light-color: #eee;
+    --dark-color: #191919;
 }
 
 .sidebar {
@@ -9,8 +28,9 @@ html, body {
     width: 25%;
     height: 100%;
     left: 0;
-
-    background-color: gray;
+    /* offset-x | offset-y | blur-radius | spread-radius | color */
+    box-shadow: 4px 0px 5px 1px rgba(0, 0, 0, 0.2);
+    background-color:var(--light-color);
 }
 
 #grid {
@@ -20,34 +40,121 @@ html, body {
     left: 25%;
 }
 
-.equation {                
-    background-color: white;
+.equation {         
     font-size: 18pt;
-    
-    margin: none;
+    background-color:var(--light-color);
     border: none;
+    border-bottom: 1px var(--dark-color) solid;
+    color: var(--dark-color);
     outline: none;
 
     --padding: 10px;
-    --margin: 10px;
-    padding: var(--padding);
+    --margin: 0px;
+    
+    flex-shrink: 1;
 
-    width: calc(calc(100% - calc(var(--padding) * 2)) - calc(var(--margin) * 2));
+    line-height: 61px;
+    letter-spacing: .2rem;
+    
+    width: calc(calc(calc(100% - calc(var(--padding) * 2)) - calc(var(--margin) * 2)) - 6px);
+    height: calc(60px - calc(var(--padding) * 2));
+    padding: var(--padding);
     margin: var(--margin) var(--margin) 0 var(--margin);
 }
 
-.add-equation {
-    background-color: white;
-    font-size: 18pt;
+.equation:focus {
+    --border: 3px;
+    border: 3px solid var(--color-two);
+    border-left: none;
+    height: calc(calc(61px - calc(var(--padding) * 2)) - 6px);
+}
+
+.container > div {
+    display:block;
+    width: 59px;
+    height: 60px;
+    padding: 0;
+    margin: 0;
+    border: none;
+    border-right: 1px var(--dark-color) solid;
+    border-bottom: 1px var(--dark-color) solid;
+    order: -1;
+    flex-shrink: 0;
+}
+
+.equation:focus + .left {
+    background: var(--color-two);
+    border-right: none;
+    width:60px;
+    height:61px;
+    border-bottom: none;
+}
+
+.container {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+}
+
+.container .left {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.container .left h3 {
+    display:block;
+}
+
+.sidemenu {
+    background-color: #2D4263;
+    border-bottom: 1px #191919 solid;
     
-    margin: none;
+    --width: 100%;
+    --padding: 0px;
+    
+    display:flex;
+    justify-content: flex-end;
+    align-items: center;
+    
+    width: var(--width);
+    height: var(--sidemenu-height);
+    padding: var(--padding);
+}
+
+.sidemenu h1 {
+    color: #ECDBBA;
+    margin: 0;
+    margin-left: 5px;
+    font-size: 1em;
+}
+
+.add-equation {
     border: none;
     outline: none;
+    font-size: 18pt;
+    border-radius: 25%;
+    background:none;
+    color:#eee;
+    
+    --margin: 0px;
+    --size: 35px;
 
-    --padding: 10px;
-    --margin: 10px;
-    padding: var(--padding);
+    margin: var(--margin);
+    margin-right: calc(calc(var(--sidemenu-height) - var(--size)) / 2);
+    width: var(--size);
+    height: var(--size);
+    
+    transition-property: background-color;
+    transition-duration: 200ms;
+}
 
-    width: calc(calc(100% - calc(var(--padding) * 2)));
-    margin: var(--margin) var(--margin) 0 var(--margin);
+.add-equation:hover {
+    background-color: var(--dark-color);
+}
+
+.sidemenu span {
+    vertical-align: middle;
+    line-height: normal;
+    right: 5px;
 }
