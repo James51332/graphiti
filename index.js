@@ -3,6 +3,7 @@ var canvas = document.getElementById("grid");
 var ctx = canvas.getContext("2d");
 var drawList = [];
 var graphList = [];
+var mouseX = 0, mouseY = 0;
 
 // ----- Primitives ----------
 
@@ -58,16 +59,18 @@ class Vec2 {
 // ----- Drawables ----------
 
 class Line {
-    constructor(pos1, pos2)
+    constructor(pos1, pos2, thickness)
     {
         this.pos1 = pos1;
         this.pos2 = pos2;
+        this.thickness = thickness;
     }
 
     draw() {
+        ctx.beginPath();
+        ctx.lineWidth = this.thickness;
         ctx.moveTo(this.pos1.x, this.pos1.y);
         ctx.lineTo(this.pos2.x, this.pos2.y);
-        ctx.lineWidth = 2;
         ctx.stroke();
     }
 }
@@ -85,18 +88,40 @@ class Rectangle {
 }
 
 class Grid {
-    constructor(horizontal, vertical)
+    static list = [];
+    static horizontal = new Vec2(-10, 10);
+    static vertical = new Vec2(-10, 10);
+
+    static set(horizontal, vertical)
     {
-        this.list = []; // we create a our own list so our lines aren't cached and redrawn by the drawList during resize
         this.horizontal = horizontal;
         this.vertical = vertical;
     }
 
-    draw() {
+    static draw() {
         this.list.length = 0; // clear list
 
-        line(0, getHeight() / 2, getWidth(), getHeight() / 2, this.list);
-        line(getWidth() / 2, 0, getWidth() / 2, getHeight(), this.list);
+        var maxLines = 30;
+
+        var x0 = map(0, this.horizontal.x, this.horizontal.y, 0, getWidth());
+        var y0 = map(0, this.vertical.x, this.vertical.y, getHeight(), 0);
+
+        var distBetweenX = getWidth() / (this.horizontal.y - this.horizontal.x);
+        var distBetweenY = getHeight() / (this.vertical.y - this.vertical.x);
+
+        // Midlines
+        line(0, y0, getWidth(), y0, 5, -1);
+        line(x0, 0, x0, getHeight(), 5, -1);
+
+        for (var i = x0 - distBetweenX * Math.floor(x0 / distBetweenX); i < getWidth(); i += distBetweenX)
+        {   
+            line(i, 0, i, getHeight(), 1, -1);
+        }
+
+        for (var i = y0 - distBetweenY * Math.floor(y0 / distBetweenY); i < getHeight(); i += distBetweenY)
+        {   
+            line(0, i, getWidth(), i, 1, -1);
+        }
     }
 }
 
@@ -196,15 +221,15 @@ class Graph {
         if (this.equation == -1) return;
 
         // Constants
-        var tileSize = 1;
+        var tileSize = 2;
         var canvasWidth = getWidth();
         var canvasHeight = getHeight();
 
         // TODO: obtain these from the grid.
-        var screenLeft = -10;
-        var screenRight = 10;
-        var screenTop = 10;
-        var screenBottom = -10;
+        var screenLeft = Grid.horizontal.x;
+        var screenRight = Grid.horizontal.y;
+        var screenBottom = Grid.vertical.x;
+        var screenTop = Grid.vertical.y;
         
         var implicit = new Expression(this.equation.lhs, this.equation.rhs, Operation.Subtract);
 
@@ -217,8 +242,10 @@ class Graph {
 
         // Function to asynchronously evaluate a column
         async function evalCol(data, row) {
+            var i = map(row, 0, data.length - 1, 0, getWidth());
+
             for (var j = 0; j <= canvasHeight; j += tileSize) {
-                var x = map(row, 0, canvasWidth, screenLeft, screenRight);
+                var x = map(i, 0, canvasWidth, screenLeft, screenRight);
                 var y = map(j, 0, canvasHeight, screenTop, screenBottom);
 
                 Registry.set(Reserved.X, x);
@@ -231,19 +258,19 @@ class Graph {
 
         // Run the calculation asynchronously
         var promises = [];
-        for (var i = 0; i <= canvasWidth; i += tileSize)
+        for (var i = 0; i < data.length; i += 1)
         {
             promises.push(evalCol(data, i));
         }
         await Promise.all(promises);
         
         // Step 2) Draw
-        for (var i = 0; i < canvasWidth; i += tileSize)
+        for (var i = 0; i < data.length; i += 1)
         {
             // if there isn't another column after this, our algorithm won't work
             if (i >= data.length - 1) break;
 
-            for (var j = 0; j < canvasHeight; j += tileSize)
+            for (var j = 0; j < data[0].length; j += 1)
             {
                 // if there isn't another row after this, our algorithm won't work
                 if (j >= data[i].length - 1) break;
@@ -262,7 +289,9 @@ class Graph {
                     | oppositeSign(p3, p4)
                     | oppositeSign(p4, p1))
                 {
-                    rect(i, j, tileSize, tileSize, -1);
+                    var sx = map(i, 0, data.length - 1, 0, canvasWidth);
+                    var sy = map(j, 0, data[0].length - 1, 0, canvasHeight);
+                    rect(sx, sy, tileSize, tileSize, -1);
                 }
             }
         }
@@ -275,6 +304,7 @@ class Graph {
     window.onresize = sizeCanvas;
     sizeCanvas();
 
+    Grid.set(new Vec2(-10, 10), new Vec2(-10, 10));
     grid();
 }
 
@@ -803,11 +833,11 @@ function redraw()
     }
 }
 
-function line(x1, y1, x2, y2, list = drawList)
+function line(x1, y1, x2, y2, t, list = drawList)
 {
     var pos1 = new Vec2(x1, y1);
     var pos2 = new Vec2(x2, y2);
-    var line = new Line(pos1, pos2);
+    var line = new Line(pos1, pos2, t);
     draw(list, line);
 }
 
@@ -819,16 +849,23 @@ function rect(x, y, w, h, list = drawList)
     draw(list, rect);
 }
 
-function grid(left = -10, right = 10, bottom = -10, top = 10, list = drawList) {
-    var grid = new Grid(new Vec2(left, right), new Vec2(bottom, top));
-    draw(list, grid);
+function grid(list = drawList)
+{
+    draw(list, Grid);
 }
 
 // ----- Resize Callback ----------
 function sizeCanvas() {
     // The canvas thinks it's the full screen if we don't do this
-    ctx.canvas.width = window.innerWidth * 0.75;
-    ctx.canvas.height = window.innerHeight;
+    ctx.canvas.width = window.innerWidth * 0.75 * 2;
+    ctx.canvas.height = window.innerHeight * 2;
+
+    var ratio = getHeight() / getWidth();
+    var newVertRange = (Grid.horizontal.y - Grid.horizontal.x) * ratio;
+    var curVertRange = (Grid.vertical.y - Grid.vertical.x);
+    var rangeRatio = newVertRange / curVertRange;
+    Grid.vertical.y *= rangeRatio;
+    Grid.vertical.x *= rangeRatio;
 
     redraw();
 }
@@ -883,3 +920,34 @@ function parseInput(id)
         redraw();
     }
 }
+
+// ----- User Input ----------
+
+var panning = false;
+canvas.addEventListener('mousemove', (e) => {
+    var deltaX = (e.offsetX * 2) - mouseX;
+    var deltaY = (e.offsetY * 2) - mouseY;
+
+    mouseX = e.offsetX * 2;
+    mouseY = e.offsetY * 2;
+
+    if (!panning) return;
+
+    var moveX = map(deltaX, 0, getWidth(), 0, Grid.horizontal.y - Grid.horizontal.x); // if we move our mouse half way right, move the grid left. therefore, we subtract.
+    Grid.horizontal.x -= moveX;
+    Grid.horizontal.y -= moveX;
+
+    var moveY = map(deltaY, 0, getHeight(), 0, Grid.vertical.x - Grid.vertical.y);
+    Grid.vertical.x -= moveY;
+    Grid.vertical.y -= moveY;
+
+    redraw();
+});
+  
+canvas.addEventListener('mousedown', (e) => {
+    panning = true;
+});
+
+window.addEventListener('mouseup', e => {
+    panning = false;
+});

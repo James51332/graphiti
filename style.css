@@ -52,6 +52,7 @@ body {
     --margin: 0px;
     
     flex-shrink: 1;
+    font-family: 'Roboto', sans-serif;
 
     line-height: 61px;
     letter-spacing: .2rem;
@@ -104,6 +105,7 @@ body {
 
 .container .left h3 {
     display:block;
+    font-family: 'Roboto', sans-serif;
 }
 
 .sidemenu {
@@ -114,7 +116,7 @@ body {
     --padding: 0px;
     
     display:flex;
-    justify-content: flex-end;
+    justify-content:space-between;
     align-items: center;
     
     width: var(--width);
@@ -123,9 +125,12 @@ body {
 }
 
 .sidemenu h1 {
-    color: #ECDBBA;
+    color: #eee;
+    font-family: 'Roboto', sans-serif;
+    line-height: var(--sidemenu-height);
+    padding:0;
     margin: 0;
-    margin-left: 5px;
+    margin-left: calc(calc(var(--sidemenu-height) - 35px) / 2);
     font-size: 1em;
 }
 
@@ -144,6 +149,7 @@ body {
     margin-right: calc(calc(var(--sidemenu-height) - var(--size)) / 2);
     width: var(--size);
     height: var(--size);
+    line-height: normal;
     
     transition-property: background-color;
     transition-duration: 200ms;
