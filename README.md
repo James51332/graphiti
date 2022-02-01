@@ -6,6 +6,9 @@ My AP Computer Science Principles final project: a graphing calculator!
 
 ## Screenshots
 
+### Version 0.3
+![Graphiti v0.3](screenshots/graphiti-v0.3.png)
+
 ### Version 0.2
 ![Graphiti v0.2](screenshots/graphiti-v0.2.png)
 
