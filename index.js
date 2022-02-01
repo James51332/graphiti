@@ -361,11 +361,9 @@ function parse(tokens)
 // 1. If the last token we parsed was an operator, we can have an operand or opening parenthesis.
 // 2. If the last token we parsed was a punctuator, there are a few options that could come next:
     // a. after an opening parenthesis, we can only accept an operand.
-    // b. after a closing parenthesis, we can accept an opening parenthesis (implicit multiplication), an operator, or an operand.
+    // b. after a closing parenthesis, we can accept an operator.
 // 3. If the last token we parsed was an operand, there are several possibilities:
     // a. we can accept a operator.
-    // b. we can accept a variable (implicit multiplication).
-    // c. we can accept an opening parenthesis (implicit multiplication).
     // d. we can accept a closing parenthesis (closing expression).
 
 // We also need to guarantee that we end on an operand or a closing parenthesis. and that all of our parenthesis are closed out.
@@ -390,11 +388,11 @@ function verifyExpression(tokens)
                 if (last == TokenType.OpeningParenthesis)
                     expected == TokenCategory.Operand;
                 else if (last == TokenType.ClosingParenthesis)
-                    expected == TokenType.OpeningParenthesis | TokenType.Operator | TokenCategory.Operand;
+                    expected == TokenType.Operator;
             }
             else if (Token.match(last, TokenCategory.Operand)) // Operand
             {
-                expected = TokenType.Operator | TokenType.Variable | TokenType.OpeningParenthesis | TokenType.ClosingParenthesis;
+                expected = TokenType.Operator | TokenType.ClosingParenthesis;
             }
         }
         
