@@ -32,7 +32,8 @@ const TokenCategory = {
     Any: (TokenType.Constant | TokenType.Variable | TokenType.Operator | TokenType.OpeningParenthesis | TokenType.ClosingParenthesis | TokenType.Equals)
 };
 
-class Token {
+class Token 
+{
     constructor(type, category, value)
     {
         this.type = type;
@@ -48,7 +49,8 @@ class Token {
     }
 }
 
-class Vec2 {
+class Vec2 
+{
     constructor(x, y)
     {
         this.x = x;
@@ -58,7 +60,8 @@ class Vec2 {
 
 // ----- Drawables ----------
 
-class Line {
+class Line 
+{
     constructor(pos1, pos2, thickness)
     {
         this.pos1 = pos1;
@@ -66,7 +69,8 @@ class Line {
         this.thickness = thickness;
     }
 
-    draw() {
+    draw() 
+    {
         ctx.beginPath();
         ctx.lineWidth = this.thickness;
         ctx.moveTo(this.pos1.x, this.pos1.y);
@@ -75,7 +79,8 @@ class Line {
     }
 }
 
-class Rectangle {
+class Rectangle 
+{
     constructor(pos, size)
     {
         this.pos = pos;
@@ -87,7 +92,8 @@ class Rectangle {
     }
 }
 
-class Grid {
+class Grid 
+{
     static list = [];
     static horizontal = new Vec2(-10, 10);
     static vertical = new Vec2(-10, 10);
@@ -98,7 +104,8 @@ class Grid {
         this.vertical = vertical;
     }
 
-    static draw() {
+    static draw() 
+    {
         this.list.length = 0; // clear list
 
         var maxLines = 30;
@@ -127,7 +134,8 @@ class Grid {
 
 // ----- Constant ----------
 
-class Constant {
+class Constant 
+{
     constructor(value)
     {
         this.value = value;
@@ -145,18 +153,22 @@ const Reserved = {
     Y: Symbol('y')
 };
 
-class Registry {
+class Registry 
+{
     static map = new Map;
 
-    static get(variable) {
+    static get(variable) 
+    {
         return this.map.get(variable);
     }
 
-    static set(variable, value) {
+    static set(variable, value) 
+    {
         this.map.set(variable, value);
     }
 
-    static exists(variable) {
+    static exists(variable) 
+    {
         return this.map.has(variable);
     }
 }
@@ -178,7 +190,8 @@ class Variable
 
 // ----- Equations ----------
 
-class Expression {
+class Expression 
+{
     constructor(term1, term2, op)
     {
         this.term1 = term1;
@@ -200,7 +213,8 @@ class Expression {
     }
 }
 
-class Equation {
+class Equation 
+{
     constructor(lhs, rhs)
     {
         this.lhs = lhs;
@@ -210,7 +224,8 @@ class Equation {
 
 // ----- Graphing ----------
 
-class Graph {
+class Graph 
+{
     constructor(equation)
     {
         this.equation = equation;
@@ -225,7 +240,6 @@ class Graph {
         var canvasWidth = getWidth();
         var canvasHeight = getHeight();
 
-        // TODO: obtain these from the grid.
         var screenLeft = Grid.horizontal.x;
         var screenRight = Grid.horizontal.y;
         var screenBottom = Grid.vertical.x;
@@ -298,16 +312,48 @@ class Graph {
     }
 }
 
-// ----- Entry ----------
-{
-    // Resize Callback
-    window.onresize = sizeCanvas;
-    sizeCanvas();
-
-    grid();
-}
-
 // ----- Parsing ----------
+
+function parse(tokens) 
+{
+    // Step 1) Convert Equation to Separate Expressions
+    var sides = splitTokens(tokens);
+    if (sides === -1) 
+    {
+        console.log("Parsing failed because tokens couldn't be split!");
+        return -1;
+    }
+
+    // Step 2) Validate Expressions
+    var valid = verifyExpression(sides[0]) && verifyExpression(sides[1]);
+    if (!valid)
+    {
+        console.log("Parsing failed because expression(s) were invalid!");
+        return -1;
+    }
+
+    // Step 3) Parse Expressions into Postfix Notation
+    console.log(sides[0]);
+    var lhs = parseTokens(sides[0]);
+    var rhs = parseTokens(sides[1]);
+    if (lhs === -1 || rhs === -1)
+    {
+        console.log("Parsing failed because expression(s) couldn't be parsed!");
+        return -1;
+    }
+
+    // Step 4) Convert Postfix to Expression Tree
+    var leftExpr = parsePostfix(lhs);
+    var rightExpr = parsePostfix(rhs);
+    if (leftExpr === -1 || rightExpr === -1)
+    {
+        console.log("Parsing failed because expression(s) couldn't be converted!");
+        return -1;
+    }
+
+    // Step 5) Return Equation from Expressions.
+    return new Equation(leftExpr, rightExpr);
+}
 
 // Here's my implementation for an error detection algorithm:
 // Iterate through the array, knowing we must start with an operand or opening parenthesis:
@@ -324,7 +370,7 @@ class Graph {
 
 // We also need to guarantee that we end on an operand or a closing parenthesis. and that all of our parenthesis are closed out.
 
-function validate(tokens)
+function verifyExpression(tokens)
 {
     var last = TokenType.None;
     var expected = (TokenCategory.Operand | TokenType.OpeningParenthesis);
@@ -391,74 +437,7 @@ function validate(tokens)
     return true;
 }
 
-// I want to take a minute to breakdown the pipeline for converting from a string a text to a parsed
-// equation. This will allow us to maintain a larger codebase. Here are the steps:
-
-// 1) Tokenize (via tokenize)
-// 2) Split equation into expressions (via splitTokens)
-// 3) Parse expressions into postfix (via parseTokens)
-// 4) Convert postfix into expression tree (via parseExpr)
-
-function parse(string) {
-    // Convert the string of characters into an array of tokens
-    var toks = tokenize(string);
-    console.log(toks);
-    if (toks === -1) 
-    {
-        console.log("Parsing failed because string couldn't be tokenized!");
-        return -1;
-    }
-
-    // Split the tokens into to expressions to be parsed
-    var sides = splitTokens(toks);
-    console.log(sides);
-    if (sides === -1) 
-    {
-        console.log("Parsing failed because tokens couldn't be split!");
-        return -1;
-    }
-
-    var valid = validate(sides[0]) && validate(sides[1]);
-    if (!valid)
-    {
-        console.log("Parsing failed because expression(s) were invalid!");
-        return -1;
-    }
-
-    var lhs = parseTokens(sides[0]);
-    var rhs = parseTokens(sides[1]);
-    console.log(lhs, rhs);
-    if (lhs === -1 || rhs === -1)
-    {
-        console.log("Parsing failed because expression(s) couldn't be parsed!");
-        return -1;
-    }
-
-    lhs = parseExpr(lhs);
-    rhs = parseExpr(rhs);
-    console.log(lhs, rhs);
-    if (lhs === -1 || rhs === -1)
-    {
-        console.log("Parsing failed because expression(s) couldn't be converted!");
-        return -1;
-    }
-
-    return new Equation(lhs, rhs);
-}
-
-// Another thing to note is that we have essentially **NO** safe error checking. We could switch
-// to an infix parser or create a state machine to determine what should be expected in the equation next.
-// https://stackoverflow.com/questions/29634992/shunting-yard-validate-expression
-// I don't think this is something that will be too hard but it's crucial to implementing a better system.
-
-// Older Comments
-
-// I am writing this algorithm with a small bit of background knowledge on
-// compiler design. First we tokenize into our seperate tokens. Then, we write
-// a recursive descent algorithm that will convert the tokens into expressions.
-// Currently, I'm looking at the Shunting-yard algorithm as a good starting place.
-// This will also handle operator-precedence. We create two stacks of values and then
-// operators.
+// ----- Shunting-Yard Algorithm ----------
 
 // https://www.freecodecamp.org/news/parsing-math-expressions-with-javascript-7e8f5572276e/
 // https://web.archive.org/web/20200719202722/https://en.wikipedia.org/wiki/Shunting-yard_algorithm
@@ -474,6 +453,7 @@ function parse(string) {
 // 8. If the token at the top of the stack is a Function, pop it onto the output queue.
 // When there are no more tokens to read, pop any Operator tokens on the stack onto the output queue.
 // Exit.
+
 function parseTokens(tokens)
 {   
     var outputQueue = [];
@@ -488,27 +468,27 @@ function parseTokens(tokens)
         // Parse Constants
         if (token.type == TokenType.Constant)
         {
-            outputQueue.push(new Constant(token.value));
+            outputQueue.push(token.value);
         }
 
         // Parse Variables
         if (token.type == TokenType.Variable)
         {
-            outputQueue.push(new Variable(token.value));
+            outputQueue.push(token.value);
         }
 
         // Handle Parenthesis
         if (Token.match(token.category, TokenCategory.Punctuator))
         {
             if (token.type == TokenType.OpeningParenthesis)
-                operatorStack.push('(');
+                operatorStack.push(token);
             
             if (token.type == TokenType.ClosingParenthesis)
             {
                 while (true)
                 {
                     var operator = operatorStack.pop();
-                    if (operator == '(' || operatorStack.length == 0) break;
+                    if (operator.value == '(' || operatorStack.length == 0) break;
 
                     outputQueue.push(operator);
                 }
@@ -518,13 +498,13 @@ function parseTokens(tokens)
         // Operator Stack
         if (token.type == TokenType.Operator)
         {
-            var op = token.value;
+            var op = token;
 
             while (operatorStack.length > 0)
             {
                 var prevOp = operatorStack[operatorStack.length - 1];
 
-                if (prevOp.Precedence > op.Precedence || prevOp.Precedence == op.Precedence && prevOp.left == true)
+                if (prevOp.value.Precedence > op.value.Precedence || prevOp.value.Precedence == op.value.Precedence && prevOp.value.left == true)
                 {
                     operatorStack.pop();
                     outputQueue.push(prevOp);
@@ -534,7 +514,7 @@ function parseTokens(tokens)
                 }
             }
 
-            operatorStack.push(op);
+            operatorStack.push(token);
         }
 
         last = token.type;
@@ -589,15 +569,15 @@ function splitTokens(toks)
 
         if (token.type != TokenType.Variable)
             continue;
-        else if (token.value == Reserved.X) 
+        else if (token.value.symbol == Reserved.X) 
             referenceX = true;
-        else if (token.value == Reserved.Y)
+        else if (token.value.symbol == Reserved.Y)
             referenceY = true;
     }
 
     if (referenceX && !referenceY)
     {
-        var rhs = [new Token(TokenType.Variable, TokenCategory.Operand, Reserved.Y)];
+        var rhs = [new Token(TokenType.Variable, TokenCategory.Operand, new Variable(Reserved.Y))];
         return [toks, rhs];
     } else
     {
@@ -609,25 +589,17 @@ function splitTokens(toks)
     }
 }
 
-function isOpName(tok)
-{
-    return (tok == 'Add')
-        || (tok == 'Subtract')
-        || (tok == 'Multiply')
-        || (tok == 'Divide')
-        || (tok == 'Exponent');
-}
-
 // Accepts an RPN Array
-function parseExpr(expr)
+function parsePostfix(expr)
 {
     // Edge case where there is only one variable
     if (expr.length == 1)
     {
-        if (isOpName(expr[0]))
+        var token = expr[0];
+        if (token.type == TokenType.Operator)
             console.error("Operator cannot be parsed as expression!");
         else 
-            return expr[0];
+            return token;
     }
 
     // This is pretty simple. We are going to rely on the parsing algorithm to guarantee that this is valid
@@ -637,14 +609,17 @@ function parseExpr(expr)
     {
         var tok = expr[i]; // Get the current token.
 
-        if (!isOpName(tok.Name)) // TODO: This isn't the most comfortable way to write this code. Revisit later.
+        // In order to be able to easily check if a token is an operator, we 
+        // pass operators as tokens, but constants and variables as their respective classes.
+        if (tok.type != TokenType.Operator) 
             continue;
 
         if (expr.indexOf(tok) < 2) return -1; // If there aren't two terms before the operator, we have a problem.
 
+        // We need to pass the constants and variables instead of tokens because we can't take the value since it could be an expression.
         var t1 = expr[i - 2];
         var t2 = expr[i - 1];
-        var e = new Expression(t1, t2, tok);
+        var e = new Expression(t1, t2, tok.value); 
 
         expr.splice(i - 2, 3, e); // replace the three terms we just converted with an evaluable expression
         i = 0;
@@ -656,14 +631,16 @@ function parseExpr(expr)
 
 // ----- Tokenizing ----------
 
-function isNumeric(str) {
+function isNumeric(str) 
+{
     if (typeof str != "string") return false; // we only process strings!  
 
     return !isNaN(str) && // use type coercion to parse the _entirety_ of the string (`parseFloat` alone does not do this)...
            !isNaN(parseFloat(str)) // ...and ensure strings of whitespace fail
 }
 
-function isOperator(str) {
+function isOperator(str) 
+{
     return (str == '+') 
         || (str == '-')
         || (str == '*')
@@ -671,7 +648,8 @@ function isOperator(str) {
         || (str == '^');   
 }
 
-function tokenize(expr) {
+function tokenize(expr) 
+{
 
     var tokens = [];
     var last = TokenType.None;
@@ -703,7 +681,7 @@ function tokenize(expr) {
                 tokens.push(new Token(TokenType.Operator, TokenCategory.Operator, Operation.Multiply));
 
             // once we've parsed the constant, push it and skip to next token.
-            tokens.push(new Token(TokenType.Constant, TokenCategory.Operand, value));
+            tokens.push(new Token(TokenType.Constant, TokenCategory.Operand, new Constant(value)));
             last = TokenType.Constant;
             continue;
             
@@ -733,7 +711,7 @@ function tokenize(expr) {
             if (last == TokenType.ClosingParenthesis | Token.match(last, TokenCategory.Operand)) // implicit multiplication
                 tokens.push(new Token(TokenType.Operator, TokenCategory.Operator, Operation.Multiply));
 
-            tokens.push(new Token(TokenType.Variable, TokenCategory.Operand, Reserved.X));
+            tokens.push(new Token(TokenType.Variable, TokenCategory.Operand, new Variable(Reserved.X)));
             last = TokenType.Variable;
             continue;
         } else if (char == 'y')
@@ -741,7 +719,7 @@ function tokenize(expr) {
             if (last == TokenType.ClosingParenthesis | Token.match(last, TokenCategory.Operand)) // implicit multiplication
                 tokens.push(new Token(TokenType.Operator, TokenCategory.Operator, Operation.Multiply));
 
-            tokens.push(new Token(TokenType.Variable, TokenCategory.Operand, Reserved.Y));
+            tokens.push(new Token(TokenType.Variable, TokenCategory.Operand, new Variable(Reserved.Y)));
             last = TokenType.Variable;
             continue;
         }
@@ -783,11 +761,13 @@ function tokenize(expr) {
 
 // ----- Utility ----------
 
-function getWidth() {
+function getWidth() 
+{
     return ctx.canvas.width;
 }
 
-function getHeight() {
+function getHeight() 
+{
     return ctx.canvas.height;
 }
 
@@ -811,21 +791,24 @@ function draw(list, item)
     if (list != -1) list.push(item);
 }
 
-function clear() {
+function clear() 
+{
     ctx.clearRect(0, 0, getWidth(), getHeight());
     drawList.clear();
 }
 
 function redraw()
 {
+    // Step 1) Clear Screen
     ctx.clearRect(0, 0, getWidth(), getHeight());
 
-    // Redraw All Elements
+    // Step 2) Redraw All Elements
     for (var i = 0; i < drawList.length; i++)
     {
         drawList[i].draw();
     }
     
+    // Step 3) Redraw Grids
     for (var i = 0; i < graphList.length; i++)
     {
         graphList[i].draw();
@@ -854,7 +837,9 @@ function grid(list = drawList)
 }
 
 // ----- Resize Callback ----------
-function sizeCanvas() {
+
+function sizeCanvas() 
+{
     // The canvas thinks it's the full screen if we don't do this
     ctx.canvas.width = window.innerWidth * 0.75 * 2;
     ctx.canvas.height = window.innerHeight * 2;
@@ -869,11 +854,15 @@ function sizeCanvas() {
     redraw();
 }
 
+window.onresize = sizeCanvas;
+sizeCanvas();
+
 // ----- Equations ----------
 
 var equationCount = 0;
 
-function addEquation() {
+function addEquation() 
+{
     var sidebar = document.getElementsByClassName("sidebar")[0];
 
     var inputDiv = document.createElement("div");
@@ -906,7 +895,8 @@ function parseInput(id)
     var raw = document.body.getElementsByClassName("equation")[id].value;
     
     // Parse our string
-    var equation = parse(raw);
+    var tokens = tokenize(raw);
+    var equation = parse(tokens);
     var graph = new Graph(equation);
     
     if (equationCount > graphList.length)
@@ -923,7 +913,8 @@ function parseInput(id)
 // ----- User Input ----------
 
 var panning = false;
-canvas.addEventListener('mousemove', (e) => {
+canvas.addEventListener('mousemove', (e) => 
+{
     var deltaX = (e.offsetX * 2) - mouseX;
     var deltaY = (e.offsetY * 2) - mouseY;
 
@@ -943,10 +934,17 @@ canvas.addEventListener('mousemove', (e) => {
     redraw();
 });
   
-canvas.addEventListener('mousedown', (e) => {
+canvas.addEventListener('mousedown', (e) => 
+{
     panning = true;
 });
 
-window.addEventListener('mouseup', e => {
+window.addEventListener('mouseup', e => 
+{
     panning = false;
 });
+
+// ----- Entry ----------
+{
+    grid();
+}
