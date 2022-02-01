@@ -325,7 +325,7 @@ function parse(tokens)
     }
 
     // Step 2) Validate Expressions
-    var valid = verifyExpression(sides[0]) && verifyExpression(sides[1]);
+    var valid = verifyTokens(sides[0]) && verifyTokens(sides[1]);
     if (!valid)
     {
         console.log("Parsing failed because expression(s) were invalid!");
@@ -368,7 +368,7 @@ function parse(tokens)
 
 // We also need to guarantee that we end on an operand or a closing parenthesis. and that all of our parenthesis are closed out.
 
-function verifyExpression(tokens)
+function verifyTokens(tokens)
 {
     var last = TokenType.None;
     var expected = (TokenCategory.Operand | TokenType.OpeningParenthesis);
@@ -502,7 +502,7 @@ function parseTokens(tokens)
             {
                 var prevOp = operatorStack[operatorStack.length - 1];
 
-                if (prevOp.value.Precedence > op.value.Precedence || prevOp.value.Precedence == op.value.Precedence && prevOp.value.left == true)
+                if ((prevOp.value.Precedence > op.value.Precedence) || (prevOp.value.Precedence == op.value.Precedence && prevOp.value.Left == true))
                 {
                     operatorStack.pop();
                     outputQueue.push(prevOp);
@@ -839,8 +839,8 @@ function grid(list = drawList)
 function sizeCanvas() 
 {
     // The canvas thinks it's the full screen if we don't do this
-    ctx.canvas.width = window.innerWidth * 0.75 * 2;
-    ctx.canvas.height = window.innerHeight * 2;
+    ctx.canvas.width = window.innerWidth * 0.75;
+    ctx.canvas.height = window.innerHeight;
 
     var ratio = getHeight() / getWidth();
     var newVertRange = (Grid.horizontal.y - Grid.horizontal.x) * ratio;
@@ -913,11 +913,11 @@ function parseInput(id)
 var panning = false;
 canvas.addEventListener('mousemove', (e) => 
 {
-    var deltaX = (e.offsetX * 2) - mouseX;
-    var deltaY = (e.offsetY * 2) - mouseY;
+    var deltaX = (e.offsetX) - mouseX;
+    var deltaY = (e.offsetY) - mouseY;
 
-    mouseX = e.offsetX * 2;
-    mouseY = e.offsetY * 2;
+    mouseX = e.offsetX;
+    mouseY = e.offsetY;
 
     if (!panning) return;
 
