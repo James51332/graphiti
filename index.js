@@ -304,7 +304,6 @@ class Graph {
     window.onresize = sizeCanvas;
     sizeCanvas();
 
-    Grid.set(new Vec2(-10, 10), new Vec2(-10, 10));
     grid();
 }
 
