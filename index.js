@@ -1,31 +1,34 @@
 // ----- Globals ----------
-var canvas = document.getElementById("grid");    
+var canvas = document.getElementById("grid");
 var ctx = canvas.getContext("2d");
 var drawList = [];
 var graphList = [];
-var mouseX = 0, mouseY = 0;
+var equationCount = 0;
+var mouseX = 0;
+var mouseY = 0;
+var showQuadtree = false;
 
 // ----- Primitives ----------
 
-const Operation = {
+var Operation = {
     Add: {Name: 'Add', Precedence: 1, Left: true},
     Subtract: {Name: 'Subtract', Precedence: 1, Left: true},
     Multiply: {Name: 'Multiply', Precedence: 2, Left: true},
     Divide: {Name: 'Divide', Precedence: 2, Left: true},
-    Exponent: {Name: 'Exponent', Precedence: 3, Left: false},
+    Exponent: {Name: 'Exponent', Precedence: 3, Left: false}
 };
 
-const TokenType = {
+var TokenType = {
     None: 0, 
-    Constant: 1 << 0,
-    Variable: 1 << 1,
-    Operator: 1 << 2,
-    OpeningParenthesis: 1 << 3,
-    ClosingParenthesis: 1 << 4,
-    Equals: 1 << 5,
+    Constant: (1 << 0),
+    Variable: (1 << 1),
+    Operator: (1 << 2),
+    OpeningParenthesis: (1 << 3),
+    ClosingParenthesis: (1 << 4),
+    Equals: (1 << 5)
 };
 
-const TokenCategory = {
+var TokenCategory = {
     Punctuator: (TokenType.OpeningParenthesis | TokenType.ClosingParenthesis | TokenType.Equals),
     Operand: (TokenType.Constant | TokenType.Variable),
     Operator: TokenType.Operator, 
@@ -88,48 +91,39 @@ class Rectangle
     }
 
     draw() {
-        ctx.fillRect(this.pos.x, this.pos.y, this.size.x, this.size.y);
+        ctx.strokeRect(this.pos.x, this.pos.y, this.size.x, this.size.y);
     }
 }
 
 class Grid 
 {
-    static list = [];
     static horizontal = new Vec2(-10, 10);
     static vertical = new Vec2(-10, 10);
 
-    static set(horizontal, vertical)
-    {
-        this.horizontal = horizontal;
-        this.vertical = vertical;
-    }
-
     static draw() 
     {
-        this.list.length = 0; // clear list
-
-        var maxLines = 30;
-
         var x0 = map(0, this.horizontal.x, this.horizontal.y, 0, getWidth());
         var y0 = map(0, this.vertical.x, this.vertical.y, getHeight(), 0);
 
         var distBetweenX = getWidth() / (this.horizontal.y - this.horizontal.x);
         var distBetweenY = getHeight() / (this.vertical.y - this.vertical.x);
 
-        // Midlines
-        line(0, y0, getWidth(), y0, 5, -1);
-        line(x0, 0, x0, getHeight(), 5, -1);
+        line(new Vec2(0, y0), new Vec2(getWidth(), y0), 3, -1);
+        line(new Vec2(x0, 0), new Vec2(x0, getHeight()), 3, -1);
 
-        for (var i = x0 - distBetweenX * Math.floor(x0 / distBetweenX); i < getWidth(); i += distBetweenX)
-        {   
-            line(i, 0, i, getHeight(), 1, -1);
-        }
+        for (var i = x0 - distBetweenX * Math.floor(x0 / distBetweenX); i < getWidth(); i += distBetweenX) 
+            line(new Vec2(i, 0), new Vec2(i, getHeight()), 1, -1);
 
-        for (var i = y0 - distBetweenY * Math.floor(y0 / distBetweenY); i < getHeight(); i += distBetweenY)
-        {   
-            line(0, i, getWidth(), i, 1, -1);
-        }
+        for (var i = y0 - distBetweenY * Math.floor(y0 / distBetweenY); i < getHeight(); i += distBetweenY) 
+            line(new Vec2(0, i), new Vec2(getWidth(), i), 1, -1);
     }
+}
+
+function gridToPixel(point)
+{
+    var x = map(point.x, Grid.horizontal.x, Grid.horizontal.y, 0, getWidth());
+    var y = map(point.y, Grid.vertical.x, Grid.vertical.y, getHeight(), 0);
+    return new Vec2(x, y);
 }
 
 // ----- Constant ----------
@@ -148,7 +142,7 @@ class Constant
 
 // ----- Variables ----------
 
-const Reserved = {
+var Reserved = {
     X: Symbol('x'),
     Y: Symbol('y')
 };
@@ -219,6 +213,7 @@ class Equation
     {
         this.lhs = lhs;
         this.rhs = rhs;
+        this.implicit = new Expression(lhs, rhs, Operation.Subtract);
     }
 }
 
@@ -231,83 +226,163 @@ class Graph
         this.equation = equation;
     }
 
-    async draw()
+    draw() 
     {
-        if (this.equation == -1) return;
-
-        // Constants
-        var tileSize = 2;
-        var canvasWidth = getWidth();
-        var canvasHeight = getHeight();
-
-        var screenLeft = Grid.horizontal.x;
-        var screenRight = Grid.horizontal.y;
-        var screenBottom = Grid.vertical.x;
-        var screenTop = Grid.vertical.y;
+        if (this.equation === -1) return;
         
-        var implicit = new Expression(this.equation.lhs, this.equation.rhs, Operation.Subtract);
-
-        var data = [];
-        for (var i = 0; i <= canvasWidth; i += tileSize)
-        {
-            var col = [];
-            data.push(col);
-        }
-
-        // Function to asynchronously evaluate a column
-        async function evalCol(data, row) {
-            var i = map(row, 0, data.length - 1, 0, getWidth());
-
-            for (var j = 0; j <= canvasHeight; j += tileSize) {
-                var x = map(i, 0, canvasWidth, screenLeft, screenRight);
-                var y = map(j, 0, canvasHeight, screenTop, screenBottom);
-
-                Registry.set(Reserved.X, x);
-                Registry.set(Reserved.Y, y);
-                var value = implicit.evaluate();
-
-                data[row].push(value);
-            }
-        }
-
-        // Run the calculation asynchronously
-        var promises = [];
-        for (var i = 0; i < data.length; i += 1)
-        {
-            promises.push(evalCol(data, i));
-        }
-        await Promise.all(promises);
+        var x = Grid.horizontal.x;
+        var y = Grid.vertical.x;
+        var dx = Grid.horizontal.y - Grid.horizontal.x;
+        var dy = Grid.vertical.y - Grid.vertical.x;
         
-        // Step 2) Draw
-        for (var i = 0; i < data.length; i += 1)
-        {
-            // if there isn't another column after this, our algorithm won't work
-            if (i >= data.length - 1) break;
+        this.plot(x, y, dx, dy, 1, this.equation.implicit);
+    }
 
-            for (var j = 0; j < data[0].length; j += 1)
+    async plot(x, y, dx, dy, depth, implicit)
+    {
+        var startDepth = 4;
+        var plotDepth = 11;
+
+        if (depth < startDepth)
+        {        
+            dx *= 0.5;
+            dy *= 0.5;
+
+            var promises = [];
+            promises.push(this.plot(x, y, dx, dy, depth + 1, implicit));
+            promises.push(this.plot(x + dx, y, dx, dy, depth + 1, implicit));
+            promises.push(this.plot(x, y + dy, dx, dy, depth + 1, implicit));
+            promises.push(this.plot(x + dx, y + dy, dx, dy, depth + 1, implicit));
+            await Promise.all(promises);
+        } else 
+        {
+            if (showQuadtree)
             {
-                // if there isn't another row after this, our algorithm won't work
-                if (j >= data[i].length - 1) break;
+                var p1 = gridToPixel(new Vec2(x, y + dy));
+                var p2 = gridToPixel(new Vec2(x + dx, y));
+                rect(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y, -1);
+            }
 
-                var p1 = data[i][j]; // top left
-                var p2 = data[i + 1][j]; // top right
-                var p3 = data[i + 1][j + 1]; // bottom right
-                var p4 = data[i][j + 1]; // bottom left
-
-                // TODO: One flaw with this system is that it graphs lines across asymptotes 
-                // because the sign of the implicit function changes. I'm not exactly sure how
-                // to fix this yet. One thing to note is the difference between the points will
-                // skip across infinities instead of zero. This could be a potential solution.
-                if (oppositeSign(p1, p2) 
-                    | oppositeSign(p2, p3)
-                    | oppositeSign(p3, p4)
-                    | oppositeSign(p4, p1))
+            var cs = getCase(x, y, dx, dy, implicit);
+            if (hasLine(cs))
+            {
+                if (depth >= plotDepth)
                 {
-                    var sx = map(i, 0, data.length - 1, 0, canvasWidth);
-                    var sy = map(j, 0, data[0].length - 1, 0, canvasHeight);
-                    rect(sx, sy, tileSize, tileSize, -1);
+                    plotLine(x, y, dx, dy, cs);
+                } else 
+                {
+                    dx *= 0.5;
+                    dy *= 0.5;
+                
+                    var promises = [];
+                    promises.push(this.plot(x, y, dx, dy, depth + 1, implicit));
+                    promises.push(this.plot(x + dx, y, dx, dy, depth + 1, implicit));
+                    promises.push(this.plot(x, y + dy, dx, dy, depth + 1, implicit));
+                    promises.push(this.plot(x + dx, y + dy, dx, dy, depth + 1, implicit));
+                    await Promise.all(promises);
                 }
             }
+        }
+    }
+}
+
+function getCase(x, y, dx, dy, implicit)
+{
+    var cs;
+    
+    // Point 4
+    Registry.set(Reserved.X, x);
+    Registry.set(Reserved.Y, y + dy);
+    cs = (implicit.evaluate() > 0) ? 1 : 0;
+
+    // Point 3
+    Registry.set(Reserved.X, x + dx);
+    Registry.set(Reserved.Y, y + dy);
+    cs <<= 1;
+    cs |= (implicit.evaluate() > 0) ? 1 : 0;
+
+    // Point 2
+    Registry.set(Reserved.X, x);
+    Registry.set(Reserved.Y, y);
+    cs <<= 1;
+    cs |= (implicit.evaluate() > 0) ? 1 : 0;
+
+    // Point 1
+    Registry.set(Reserved.X, x + dx);
+    Registry.set(Reserved.Y, y);
+    cs <<= 1;
+    cs |= (implicit.evaluate() > 0) ? 1 : 0;
+
+    return cs;
+}
+
+function hasLine(cs)
+{
+    return (cs != 0) && (cs != 15);
+}
+
+function plotLine(x, y, dx, dy, cs)
+{
+    // TODO: Linear interpolation
+    var a = gridToPixel(new Vec2(x + dx / 2, y + dy));
+    var b = gridToPixel(new Vec2(x + dx, y + dy / 2));
+    var c = gridToPixel(new Vec2(x + dx / 2, y));
+    var d = gridToPixel(new Vec2(x, y + dy / 2));
+
+    var thickness = 3;
+
+    switch (cs)
+    {
+        case 0: 
+        case 15:
+            break;
+        case 1: 
+        case 14:
+        {
+            line(b, c, thickness, -1);
+            break;
+        }
+        case 2:
+        case 13:
+        {
+            line(c, d, thickness, -1);
+            break;
+        } 
+        case 3: 
+        case 12:
+        {
+            line(b, d, thickness, -1);
+            break;
+        }
+        case 4:  
+        case 11:
+        {
+            line(a, b, thickness, -1);
+            break;
+        }
+        case 5:  
+        case 10:
+        {
+            line(a, c, thickness, -1);
+            break;
+        }
+        case 6:  
+        {
+            line(a, d, thickness, -1);
+            line(b, c, thickness, -1);
+            break;
+        }
+        case 7:
+        case 8:
+        {
+            line(a, d, thickness, -1);
+            break;
+        }
+        case 9:  
+        {
+            line(a, b, thickness, -1);
+            line(c, d, thickness, -1);
+            break;
         }
     }
 }
@@ -699,7 +774,7 @@ function tokenize(expr)
             }
             
             tokens.push(new Token(TokenType.Operator, TokenCategory.Operator, op));
-            last = TokenType.Operator
+            last = TokenType.Operator;
             continue;
         }
 
@@ -806,32 +881,35 @@ function redraw()
         drawList[i].draw();
     }
     
-    // Step 3) Redraw Grids
+    // Step 3) Redraw Graphs
     for (var i = 0; i < graphList.length; i++)
     {
         graphList[i].draw();
     }
 }
 
-function line(x1, y1, x2, y2, t, list = drawList)
+function line(p1, p2, t, list)
 {
-    var pos1 = new Vec2(x1, y1);
-    var pos2 = new Vec2(x2, y2);
-    var line = new Line(pos1, pos2, t);
-    draw(list, line);
+    draw(list, new Line(p1, p2, t));
 }
 
-function rect(x, y, w, h, list = drawList)
+function rect(x, y, w, h, list)
 {
     var pos = new Vec2(x, y);
     var size = new Vec2(w, h);
-    var rect = new Rectangle(pos, size);
-    draw(list, rect);
+    var shape = new Rectangle(pos, size);
+    draw(list, shape);
 }
 
-function grid(list = drawList)
+function grid()
 {
-    draw(list, Grid);
+    draw(drawList, Grid);
+}
+
+function graph(equation) 
+{
+    var graph = new Graph(equation);
+    draw(graphList, graph);
 }
 
 // ----- Resize Callback ----------
@@ -857,8 +935,6 @@ sizeCanvas();
 
 // ----- Equations ----------
 
-var equationCount = 0;
-
 function addEquation() 
 {
     var sidebar = document.getElementsByClassName("sidebar")[0];
@@ -872,7 +948,7 @@ function addEquation()
     
     
     var id = equationCount; // copy id now so that it's stored
-    input.oninput = function() { parseInput(id); }
+    input.oninput = function() { parseInput(id); };
     equationCount++;
     
     inputDiv.appendChild(input);
@@ -911,38 +987,42 @@ function parseInput(id)
 // ----- User Input ----------
 
 var panning = false;
-canvas.addEventListener('mousemove', (e) => 
+function setupInput()
 {
-    var deltaX = (e.offsetX) - mouseX;
-    var deltaY = (e.offsetY) - mouseY;
+    canvas.addEventListener("mousemove", (e) => 
+    {
+        var deltaX = (e.offsetX) - mouseX;
+        var deltaY = (e.offsetY) - mouseY;
 
-    mouseX = e.offsetX;
-    mouseY = e.offsetY;
+        mouseX = e.offsetX;
+        mouseY = e.offsetY;
 
-    if (!panning) return;
+        if (!panning) return;
 
-    var moveX = map(deltaX, 0, getWidth(), 0, Grid.horizontal.y - Grid.horizontal.x); // if we move our mouse half way right, move the grid left. therefore, we subtract.
-    Grid.horizontal.x -= moveX;
-    Grid.horizontal.y -= moveX;
+        var moveX = map(deltaX, 0, getWidth(), 0, Grid.horizontal.y - Grid.horizontal.x); // if we move our mouse half way right, move the grid left. therefore, we subtract.
+        Grid.horizontal.x -= moveX;
+        Grid.horizontal.y -= moveX;
 
-    var moveY = map(deltaY, 0, getHeight(), 0, Grid.vertical.x - Grid.vertical.y);
-    Grid.vertical.x -= moveY;
-    Grid.vertical.y -= moveY;
+        var moveY = map(deltaY, 0, getHeight(), 0, Grid.vertical.x - Grid.vertical.y);
+        Grid.vertical.x -= moveY;
+        Grid.vertical.y -= moveY;
 
-    redraw();
-});
-  
-canvas.addEventListener('mousedown', (e) => 
-{
-    panning = true;
-});
+        redraw();
+    });
+    
+    canvas.addEventListener("mousedown", (e) => 
+    {
+        panning = true;
+    });
 
-window.addEventListener('mouseup', e => 
-{
-    panning = false;
-});
+    window.addEventListener("mouseup", e => 
+    {
+        panning = false;
+    });
+}
 
 // ----- Entry ----------
 {
+    setupInput();
     grid();
 }
