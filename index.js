@@ -7,6 +7,8 @@ var equationCount = 0;
 var mouseX = 0;
 var mouseY = 0;
 var showQuadtree = false;
+var startDepth = 6;
+var plotDepth = 11;
 
 // ----- Primitives ----------
 
@@ -240,9 +242,6 @@ class Graph
 
     async plot(x, y, dx, dy, depth, implicit)
     {
-        var startDepth = 4;
-        var plotDepth = 11;
-
         if (depth < startDepth)
         {        
             dx *= 0.5;
@@ -993,19 +992,19 @@ function setupInput()
     {
         var deltaX = (e.offsetX) - mouseX;
         var deltaY = (e.offsetY) - mouseY;
-
         mouseX = e.offsetX;
         mouseY = e.offsetY;
 
         if (!panning) return;
+        {
+            var moveX = map(deltaX, 0, getWidth(), 0, Grid.horizontal.y - Grid.horizontal.x); // if we move our mouse half way right, move the grid left. therefore, we subtract.
+            Grid.horizontal.x -= moveX;
+            Grid.horizontal.y -= moveX;
 
-        var moveX = map(deltaX, 0, getWidth(), 0, Grid.horizontal.y - Grid.horizontal.x); // if we move our mouse half way right, move the grid left. therefore, we subtract.
-        Grid.horizontal.x -= moveX;
-        Grid.horizontal.y -= moveX;
-
-        var moveY = map(deltaY, 0, getHeight(), 0, Grid.vertical.x - Grid.vertical.y);
-        Grid.vertical.x -= moveY;
-        Grid.vertical.y -= moveY;
+            var moveY = map(deltaY, 0, getHeight(), 0, Grid.vertical.x - Grid.vertical.y);
+            Grid.vertical.x -= moveY;
+            Grid.vertical.y -= moveY;
+        }
 
         redraw();
     });
@@ -1013,16 +1012,27 @@ function setupInput()
     canvas.addEventListener("mousedown", (e) => 
     {
         panning = true;
+        startDepth = 4;
+        plotDepth = 9;
     });
 
-    window.addEventListener("mouseup", e => 
+    canvas.addEventListener("mouseup", (e) => 
     {
         panning = false;
+        startDepth = 6;
+        plotDepth = 11;
+        redraw();
     });
 }
 
 // ----- Entry ----------
 {
     setupInput();
+
+    ctx.lineWidth = 2;
     grid();
+    
+    var equation = parse(tokenize("x^2=y^2"));
+    var graph = new QuadGraph(equation);
+    draw(graphList, graph);
 }
